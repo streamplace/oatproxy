@@ -50,7 +50,8 @@ documents in `/.well-known`. All other requests will be proxied upstream.
 
 For this to work, you're going to have to tell some lies. Specifically, you're
 going to need to tell `@atproto/oauth-client-browser` that, no matter who the
-user is, their PDS URL is OATProxy's URL.
+user is, their PDS URL is OATProxy's URL. This can be accomplished by overriding
+the `fetch` handler passed to the client:
 
 ```typescript
 import { BrowserOAuthClient, OAuthClient } from "@atproto/oauth-client-browser";
@@ -132,3 +133,9 @@ make
 - Document usage with atcute
 - Ship `@streamplace/atproto-oauth-client-isomorphic` that tells lies
   automatically
+
+# Credits
+
+This library brought to you by
+[Streamplace](https://github.com/streamplace/streamplace).
+["Upstream" Go ATProto OAuth client forked from haileyok](https://github.com/haileyok/atproto-oauth-golang).
