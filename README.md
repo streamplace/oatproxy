@@ -2,16 +2,16 @@
 
 **ALPHA SOFTWARE, USE AT YOUR OWN RISK! LOTS MORE TO COME IN THE NEXT WEEK!**
 
-Tired of getting logged out of your AT Protocol applications every 24 hours?
+Tired of getting logged out of your AT Protocol applications every 48 hours?
 Introducing OATProxy! OATProxy acts as a transparent passthrough XRPC proxy
 between your front-end application, upgrading your users from
-frequently-expiring "public" OAuth sessions to robust, hearty "confidental"
+frequently-expiring "public" OAuth sessions to robust, hearty "confidential"
 OAuth sessions.
 
 | Session Type | Inactivity Timeout | Max Session Length |
 | ------------ | ------------------ | ------------------ |
 | Public       | 2 days             | 7 days             |
-| Confidental  | 1 month            | 1 year             |
+| Confidential | 1 month            | 1 year             |
 
 OATProxy exists as both a Go library for embedding in applications and as a
 standalone microservice.
@@ -113,7 +113,7 @@ These can be useful for debugging purposes:
 | URL                                      | Description                                                                    |
 | ---------------------------------------- | ------------------------------------------------------------------------------ |
 | `/oauth/downstream/client-metadata.json` | "Public" client metadata document presented to the "downstream" browser client |
-| `/oauth/upstream/client-metadata.json`   | "Confidental" client metadata presented to the "upstream" PDS                  |
+| `/oauth/upstream/client-metadata.json`   | "Confidential" client metadata presented to the "upstream" PDS                 |
 
 # Building
 
