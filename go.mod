@@ -7,12 +7,12 @@ require (
 	github.com/bluesky-social/indigo v0.0.0-20250520232546-236dd575c91e
 	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/google/uuid v1.6.0
-	github.com/haileyok/atproto-oauth-golang v0.0.2
 	github.com/labstack/echo/v4 v4.13.3
 	github.com/lestrrat-go/jwx/v2 v2.1.6
 	github.com/lmittmann/tint v1.1.0
 	github.com/orandin/slog-gorm v1.4.0
 	github.com/peterbourgon/ff/v3 v3.4.0
+	github.com/streamplace/atproto-oauth-golang v0.0.0-20250521042753-9cfa9e504155
 	github.com/stretchr/testify v1.10.0
 	go.opentelemetry.io/otel v1.35.0
 	gorm.io/driver/sqlite v1.5.7

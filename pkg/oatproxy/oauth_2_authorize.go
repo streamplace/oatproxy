@@ -8,8 +8,8 @@ import (
 	"net/url"
 	"time"
 
-	oauth "github.com/haileyok/atproto-oauth-golang"
-	"github.com/haileyok/atproto-oauth-golang/helpers"
+	oauth "github.com/streamplace/atproto-oauth-golang"
+	"github.com/streamplace/atproto-oauth-golang/helpers"
 	"github.com/labstack/echo/v4"
 	"go.opentelemetry.io/otel"
 )

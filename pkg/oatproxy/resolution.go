@@ -15,7 +15,7 @@ import (
 	"go.opentelemetry.io/otel"
 )
 
-// mostly borrowed from github.com/haileyok/atproto-oauth-golang, MIT license
+// mostly borrowed from github.com/streamplace/atproto-oauth-golang, MIT license
 func ResolveHandle(ctx context.Context, handle string) (string, error) {
 	var did string
 

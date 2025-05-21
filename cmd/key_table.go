@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	oauth_helpers "github.com/haileyok/atproto-oauth-golang/helpers"
+	oauth_helpers "github.com/streamplace/atproto-oauth-golang/helpers"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"gorm.io/gorm"
 )

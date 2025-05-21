@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	oauth "github.com/haileyok/atproto-oauth-golang"
+	oauth "github.com/streamplace/atproto-oauth-golang"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 )
 

@@ -9,7 +9,7 @@ import (
 
 	"github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/xrpc"
-	oauth "github.com/haileyok/atproto-oauth-golang"
+	oauth "github.com/streamplace/atproto-oauth-golang"
 	"github.com/labstack/echo/v4"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"go.opentelemetry.io/otel"
