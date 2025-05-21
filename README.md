@@ -15,3 +15,11 @@ OAuth sessions.
 
 OATProxy exists as both a Go library for embedding in applications and as a
 standalone microservice.
+
+# TODO
+
+- Many tests
+- Postgres support
+- Document usage as a library
+- Document usage as a microservice
+- Including on a worker of some kind
