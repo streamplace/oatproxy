@@ -10,7 +10,7 @@ OAuth sessions.
 
 | Session Type | Inactivity Timeout | Max Session Length |
 | ------------ | ------------------ | ------------------ |
-| Public       | 24 hours           | 7 days             |
+| Public       | 2 days             | 7 days             |
 | Confidental  | 1 month            | 1 year             |
 
 OATProxy exists as both a Go library for embedding in applications and as a
