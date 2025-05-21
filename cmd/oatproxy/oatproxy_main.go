@@ -38,7 +38,7 @@ func Run() error {
 	scope := fs.String("scope", "atproto transition:generic", "scope to use for the OAuth provider")
 	clientMetadata := fs.String("client-metadata", "", "JSON client metadata or path to JSON file containing client metadata")
 	httpAddr := fs.String("http-addr", ":8080", "HTTP address to listen on")
-	proxyHost := fs.String("proxy-host", "", "location of backend reverse proxy for all non-oauth requests (ex http://localhost:8081)")
+	upstreamHost := fs.String("upstream-host", "", "act as a reverse proxy for this upstream host (ex http://localhost:8081)")
 	// version := fs.Bool("version", false, "print version and exit")
 
 	err := ff.Parse(
@@ -53,9 +53,6 @@ func Run() error {
 		return err
 	}
 
-	if *proxyHost == "" {
-		return fmt.Errorf("proxy-host is required")
-	}
 	if *host == "" {
 		return fmt.Errorf("host is required")
 	}
@@ -118,27 +115,29 @@ func Run() error {
 		DownstreamJWK:      downstreamKey,
 	})
 
-	reverse := &httputil.ReverseProxy{
-		Rewrite: func(r *httputil.ProxyRequest) {
-			u, err := url.Parse(*proxyHost)
-			if err != nil {
-				logger.Error("failed to parse proxy host", "error", err)
-				return
-			}
-			u.RawPath = r.In.URL.RawPath
-			u.RawQuery = r.In.URL.RawQuery
-			logger.Info("proxying request", "url", u)
-			r.SetURL(u)
-		},
-	}
+	if *upstreamHost != "" {
+		reverse := &httputil.ReverseProxy{
+			Rewrite: func(r *httputil.ProxyRequest) {
+				u, err := url.Parse(*upstreamHost)
+				if err != nil {
+					logger.Error("failed to parse proxy host", "error", err)
+					return
+				}
+				u.RawPath = r.In.URL.RawPath
+				u.RawQuery = r.In.URL.RawQuery
+				logger.Info("proxying request", "url", u)
+				r.SetURL(u)
+			},
+		}
 
-	reverseEcho := func(c echo.Context) error {
-		reverse.ServeHTTP(c.Response().Writer, c.Request())
-		c.Response().Committed = true
-		return nil
-	}
+		reverseEcho := func(c echo.Context) error {
+			reverse.ServeHTTP(c.Response().Writer, c.Request())
+			c.Response().Committed = true
+			return nil
+		}
 
-	o.Echo.Any("/*", reverseEcho)
+		o.Echo.Any("/*", reverseEcho)
+	}
 
 	server := &http.Server{
 		Addr:    *httpAddr,
