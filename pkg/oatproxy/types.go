@@ -1,4 +1,4 @@
-package oproxy
+package oatproxy
 
 type OAuthClientMetadata struct {
 	RedirectURIs                          []string `json:"redirect_uris"`

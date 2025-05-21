@@ -1,4 +1,4 @@
-package oproxy
+package oatproxy
 
 import (
 	"context"
@@ -18,7 +18,7 @@ type XrpcClient struct {
 	authArgs *oauth.XrpcAuthedRequestArgs
 }
 
-func (o *OProxy) GetXrpcClient(session *OAuthSession) (*XrpcClient, error) {
+func (o *OATProxy) GetXrpcClient(session *OAuthSession) (*XrpcClient, error) {
 	key, err := jwk.ParseKey([]byte(session.UpstreamDPoPPrivateJWK))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse DPoP private JWK: %w", err)

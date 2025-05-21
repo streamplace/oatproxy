@@ -1,4 +1,4 @@
-package oproxy
+package oatproxy
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 	"go.opentelemetry.io/otel"
 )
 
-func (o *OProxy) HandleOAuthAuthorize(c echo.Context) error {
+func (o *OATProxy) HandleOAuthAuthorize(c echo.Context) error {
 	ctx, span := otel.Tracer("server").Start(c.Request().Context(), "HandleOAuthAuthorize")
 	defer span.End()
 	c.Response().Header().Set("Access-Control-Allow-Origin", "*")
@@ -57,7 +57,7 @@ func (o *OProxy) HandleOAuthAuthorize(c echo.Context) error {
 }
 
 // downstream --> upstream transition; attempt to send user to the upstream auth server
-func (o *OProxy) Authorize(ctx context.Context, requestURI, clientID string) (string, *echo.HTTPError) {
+func (o *OATProxy) Authorize(ctx context.Context, requestURI, clientID string) (string, *echo.HTTPError) {
 	downstreamMeta, err := o.GetDownstreamMetadata("")
 	if err != nil {
 		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to get downstream metadata: %s", err))

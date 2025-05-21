@@ -1,4 +1,4 @@
-package oproxy
+package oatproxy
 
 import (
 	"context"
@@ -22,12 +22,12 @@ var OAuthSessionContextKey = oauthSessionContextKeyType{}
 
 type oauthSessionContextKeyType struct{}
 
-var OProxyContextKey = oproxyContextKeyType{}
+var OATProxyContextKey = oatproxyContextKeyType{}
 
-type oproxyContextKeyType struct{}
+type oatproxyContextKeyType struct{}
 
 func GetOAuthSession(ctx context.Context) (*OAuthSession, *XrpcClient) {
-	o, ok := ctx.Value(OProxyContextKey).(*OProxy)
+	o, ok := ctx.Value(OATProxyContextKey).(*OATProxy)
 	if !ok {
 		return nil, nil
 	}
@@ -51,7 +51,7 @@ func getMethod(method string) (dpop.HTTPVerb, error) {
 	}
 	return "", fmt.Errorf("invalid method")
 }
-func (o *OProxy) OAuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
+func (o *OATProxy) OAuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		// Set CORS headers
 		c.Response().Header().Set("Access-Control-Allow-Origin", "*") // todo: ehhhhhhhhhhhh
@@ -174,14 +174,14 @@ func (o *OProxy) OAuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 
 		// Also set it in request context for non-echo handlers
 		ctx := c.Request().Context()
-		ctx = context.WithValue(ctx, oproxyContextKeyType{}, o)
+		ctx = context.WithValue(ctx, oatproxyContextKeyType{}, o)
 		ctx = context.WithValue(ctx, OAuthSessionContextKey, session)
 		c.SetRequest(c.Request().WithContext(ctx))
 		return next(c)
 	}
 }
 
-func (o *OProxy) DPoPNonceMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
+func (o *OATProxy) DPoPNonceMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		dpopHeader := c.Request().Header.Get("DPoP")
 		if dpopHeader == "" {
@@ -203,7 +203,7 @@ func (o *OProxy) DPoPNonceMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	}
 }
 
-func (o *OProxy) ErrorHandlingMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
+func (o *OATProxy) ErrorHandlingMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		err := next(c)
 		if err == nil {

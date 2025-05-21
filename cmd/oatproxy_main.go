@@ -14,7 +14,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/lmittmann/tint"
 	"github.com/peterbourgon/ff/v3"
-	"stream.place/streamplace/pkg/oproxy"
+	"github.com/streamplace/oatproxy/pkg/oatproxy"
 )
 
 func main() {
@@ -30,10 +30,10 @@ const DOWNSTREAM_KEY = "downstream"
 
 func Run() error {
 	flag.Set("logtostderr", "true")
-	fs := flag.NewFlagSet("oproxy", flag.ExitOnError)
+	fs := flag.NewFlagSet("oatproxy", flag.ExitOnError)
 	noColor := fs.Bool("no-color", false, "disable colorized logging")
 	host := fs.String("host", "", "public HTTPS address where this OAuth provider is hosted (ex example.com, no https:// prefix)")
-	dbPath := fs.String("db", "oproxy.sqlite3", "path to the database file or postgres connection string")
+	dbPath := fs.String("db", "oatproxy.sqlite3", "path to the database file or postgres connection string")
 	verbose := fs.Bool("v", false, "enable verbose logging")
 	scope := fs.String("scope", "atproto transition:generic", "scope to use for the OAuth provider")
 	clientMetadata := fs.String("client-metadata", "", "JSON client metadata or path to JSON file containing client metadata")
@@ -43,7 +43,7 @@ func Run() error {
 
 	err := ff.Parse(
 		fs, os.Args[1:],
-		ff.WithEnvVarPrefix("OPROXY"),
+		ff.WithEnvVarPrefix("OATPROXY"),
 	)
 	if err != nil {
 		return err
@@ -79,14 +79,14 @@ func Run() error {
 		return err
 	}
 
-	var meta *oproxy.OAuthClientMetadata
+	var meta *oatproxy.OAuthClientMetadata
 	if (*clientMetadata)[0] != '{' {
 		// path
 		bs, err := os.ReadFile(*clientMetadata)
 		if err != nil {
 			return err
 		}
-		meta = &oproxy.OAuthClientMetadata{}
+		meta = &oatproxy.OAuthClientMetadata{}
 		err = json.Unmarshal(bs, meta)
 		if err != nil {
 			return err
@@ -107,7 +107,7 @@ func Run() error {
 	if err != nil {
 		return err
 	}
-	o := oproxy.New(&oproxy.Config{
+	o := oatproxy.New(&oatproxy.Config{
 		Host:               *host,
 		CreateOAuthSession: store.CreateOAuthSession,
 		UpdateOAuthSession: store.UpdateOAuthSession,

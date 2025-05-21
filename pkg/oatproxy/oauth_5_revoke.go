@@ -1,4 +1,4 @@
-package oproxy
+package oatproxy
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 	"go.opentelemetry.io/otel"
 )
 
-func (o *OProxy) HandleOAuthRevoke(c echo.Context) error {
+func (o *OATProxy) HandleOAuthRevoke(c echo.Context) error {
 	ctx, span := otel.Tracer("server").Start(c.Request().Context(), "HandleOAuthRevoke")
 	defer span.End()
 	var revokeRequest RevokeRequest
@@ -31,7 +31,7 @@ func (o *OProxy) HandleOAuthRevoke(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]interface{}{})
 }
 
-func (o *OProxy) Revoke(ctx context.Context, dpopHeader string, revokeRequest *RevokeRequest) error {
+func (o *OATProxy) Revoke(ctx context.Context, dpopHeader string, revokeRequest *RevokeRequest) error {
 	proof, err := dpop.Parse(dpopHeader, dpop.POST, &url.URL{Host: o.host, Scheme: "https", Path: "/oauth/revoke"}, dpop.ParseOptions{
 		Nonce:      "",
 		TimeWindow: &dpopTimeWindow,

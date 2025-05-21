@@ -1,4 +1,4 @@
-package oproxy
+package oatproxy
 
 import (
 	"encoding/json"
@@ -9,7 +9,7 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func (o *OProxy) HandleOAuthAuthorizationServer(c echo.Context) error {
+func (o *OATProxy) HandleOAuthAuthorizationServer(c echo.Context) error {
 	c.Response().Header().Set("Access-Control-Allow-Origin", "*")
 	c.Response().Header().Set("Content-Type", "application/json")
 	c.Response().WriteHeader(200)
@@ -17,7 +17,7 @@ func (o *OProxy) HandleOAuthAuthorizationServer(c echo.Context) error {
 	return nil
 }
 
-func (o *OProxy) HandleOAuthProtectedResource(c echo.Context) error {
+func (o *OATProxy) HandleOAuthProtectedResource(c echo.Context) error {
 	return c.JSON(200, map[string]interface{}{
 		"resource": fmt.Sprintf("https://%s", o.host),
 		"authorization_servers": []string{
@@ -31,12 +31,12 @@ func (o *OProxy) HandleOAuthProtectedResource(c echo.Context) error {
 	})
 }
 
-func (o *OProxy) HandleClientMetadataUpstream(c echo.Context) error {
+func (o *OATProxy) HandleClientMetadataUpstream(c echo.Context) error {
 	meta := o.GetUpstreamMetadata()
 	return c.JSON(200, meta)
 }
 
-func (o *OProxy) HandleJwksUpstream(c echo.Context) error {
+func (o *OATProxy) HandleJwksUpstream(c echo.Context) error {
 	pubKey, err := o.upstreamJWK.PublicKey()
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "could not get public key")
@@ -44,7 +44,7 @@ func (o *OProxy) HandleJwksUpstream(c echo.Context) error {
 	return c.JSON(200, helpers.CreateJwksResponseObject(pubKey))
 }
 
-func (o *OProxy) HandleClientMetadataDownstream(c echo.Context) error {
+func (o *OATProxy) HandleClientMetadataDownstream(c echo.Context) error {
 	redirectURI := c.QueryParam("redirect_uri")
 	meta, err := o.GetDownstreamMetadata(redirectURI)
 	if err != nil {
@@ -53,7 +53,7 @@ func (o *OProxy) HandleClientMetadataDownstream(c echo.Context) error {
 	return c.JSON(200, meta)
 }
 
-func (o *OProxy) GetUpstreamMetadata() *OAuthClientMetadata {
+func (o *OATProxy) GetUpstreamMetadata() *OAuthClientMetadata {
 	meta := *o.clientMetadata
 	meta.ClientID = fmt.Sprintf("https://%s/oauth/upstream/client-metadata.json", o.host)
 	meta.JwksURI = fmt.Sprintf("https://%s/oauth/upstream/jwks.json", o.host)
@@ -109,7 +109,7 @@ func generateOAuthServerMetadata(host string) map[string]any {
 	return oauthServerMetadata
 }
 
-func (o *OProxy) GetDownstreamMetadata(redirectURI string) (*OAuthClientMetadata, error) {
+func (o *OATProxy) GetDownstreamMetadata(redirectURI string) (*OAuthClientMetadata, error) {
 	meta := *o.clientMetadata
 	meta.ClientID = fmt.Sprintf("https://%s/oauth/downstream/client-metadata.json", o.host)
 	meta.ClientURI = fmt.Sprintf("https://%s", o.host)

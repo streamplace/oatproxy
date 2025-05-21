@@ -1,4 +1,4 @@
-package oproxy
+package oatproxy
 
 import (
 	"fmt"
@@ -8,10 +8,9 @@ import (
 	"github.com/bluesky-social/indigo/xrpc"
 	"github.com/labstack/echo/v4"
 	"go.opentelemetry.io/otel"
-	"stream.place/streamplace/pkg/log"
 )
 
-func (o *OProxy) HandleWildcard(c echo.Context) error {
+func (o *OATProxy) HandleWildcard(c echo.Context) error {
 	ctx, span := otel.Tracer("server").Start(c.Request().Context(), "HandleWildcard")
 	defer span.End()
 
@@ -48,7 +47,7 @@ func (o *OProxy) HandleWildcard(c echo.Context) error {
 	}
 
 	if err != nil {
-		log.Error(ctx, "upstream xrpc error", "error", err)
+		o.slog.Error("upstream xrpc error", "error", err)
 		return err
 	}
 

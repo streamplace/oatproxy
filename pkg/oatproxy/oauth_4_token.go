@@ -1,4 +1,4 @@
-package oproxy
+package oatproxy
 
 import (
 	"context"
@@ -44,7 +44,7 @@ var OAuthTokenExpiry = time.Hour * 24
 
 var dpopTimeWindow = time.Duration(30 * time.Second)
 
-func (o *OProxy) HandleOAuthToken(c echo.Context) error {
+func (o *OATProxy) HandleOAuthToken(c echo.Context) error {
 	ctx, span := otel.Tracer("server").Start(c.Request().Context(), "HandleOAuthToken")
 	defer span.End()
 	var tokenRequest TokenRequest
@@ -78,7 +78,7 @@ func (o *OProxy) HandleOAuthToken(c echo.Context) error {
 	return c.JSON(http.StatusOK, res)
 }
 
-func (o *OProxy) Token(ctx context.Context, tokenRequest *TokenRequest, dpopHeader string) (*TokenResponse, error) {
+func (o *OATProxy) Token(ctx context.Context, tokenRequest *TokenRequest, dpopHeader string) (*TokenResponse, error) {
 	proof, err := dpop.Parse(dpopHeader, dpop.POST, &url.URL{Host: o.host, Scheme: "https", Path: "/oauth/token"}, dpop.ParseOptions{
 		Nonce:      "",
 		TimeWindow: &dpopTimeWindow,
@@ -101,7 +101,7 @@ func (o *OProxy) Token(ctx context.Context, tokenRequest *TokenRequest, dpopHead
 	return nil, echo.NewHTTPError(http.StatusBadRequest, "unsupported grant type")
 }
 
-func (o *OProxy) AccessToken(ctx context.Context, tokenRequest *TokenRequest, session *OAuthSession) (*TokenResponse, error) {
+func (o *OATProxy) AccessToken(ctx context.Context, tokenRequest *TokenRequest, session *OAuthSession) (*TokenResponse, error) {
 	if session.Status() != OAuthSessionStateDownstream {
 		return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("session is not in downstream state: %s", session.Status()))
 	}
@@ -149,7 +149,7 @@ func (o *OProxy) AccessToken(ctx context.Context, tokenRequest *TokenRequest, se
 	}, nil
 }
 
-func (o *OProxy) RefreshToken(ctx context.Context, tokenRequest *TokenRequest, session *OAuthSession) (*TokenResponse, error) {
+func (o *OATProxy) RefreshToken(ctx context.Context, tokenRequest *TokenRequest, session *OAuthSession) (*TokenResponse, error) {
 
 	if session.Status() != OAuthSessionStateReady {
 		return nil, echo.NewHTTPError(http.StatusBadRequest, "session is not in ready state")
@@ -180,7 +180,7 @@ func (o *OProxy) RefreshToken(ctx context.Context, tokenRequest *TokenRequest, s
 	}, nil
 }
 
-func (o *OProxy) generateJWT(session *OAuthSession) (string, error) {
+func (o *OATProxy) generateJWT(session *OAuthSession) (string, error) {
 	uu, err := uuid.NewV7()
 	if err != nil {
 		return "", err

@@ -1,4 +1,4 @@
-package oproxy
+package oatproxy
 
 import (
 	"log/slog"
@@ -9,7 +9,7 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwk"
 )
 
-type OProxy struct {
+type OATProxy struct {
 	createOAuthSession  func(id string, session *OAuthSession) error
 	updateOAuthSession  func(id string, session *OAuthSession) error
 	userGetOAuthSession func(id string) (*OAuthSession, error)
@@ -34,13 +34,13 @@ type Config struct {
 	ClientMetadata     *OAuthClientMetadata
 }
 
-func New(conf *Config) *OProxy {
+func New(conf *Config) *OATProxy {
 	e := echo.New()
 	mySlog := conf.Slog
 	if mySlog == nil {
 		mySlog = slog.New(slog.NewTextHandler(os.Stderr, nil))
 	}
-	o := &OProxy{
+	o := &OATProxy{
 		createOAuthSession:  conf.CreateOAuthSession,
 		updateOAuthSession:  conf.UpdateOAuthSession,
 		userGetOAuthSession: conf.GetOAuthSession,
@@ -68,7 +68,7 @@ func New(conf *Config) *OProxy {
 	return o
 }
 
-func (o *OProxy) Handler() http.Handler {
+func (o *OATProxy) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*") // todo: ehhhhhhhhhhhh
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type,DPoP")

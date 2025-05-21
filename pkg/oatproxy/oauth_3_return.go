@@ -1,4 +1,4 @@
-package oproxy
+package oatproxy
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 	"go.opentelemetry.io/otel"
 )
 
-func (o *OProxy) HandleOAuthReturn(c echo.Context) error {
+func (o *OATProxy) HandleOAuthReturn(c echo.Context) error {
 	ctx, span := otel.Tracer("server").Start(c.Request().Context(), "HandleOAuthReturn")
 	defer span.End()
 	code := c.QueryParam("code")
@@ -55,7 +55,7 @@ func (o *OProxy) HandleOAuthReturn(c echo.Context) error {
 	return c.Redirect(http.StatusTemporaryRedirect, redirectURL)
 }
 
-func (o *OProxy) Return(ctx context.Context, code string, iss string, state string) (string, *echo.HTTPError) {
+func (o *OATProxy) Return(ctx context.Context, code string, iss string, state string) (string, *echo.HTTPError) {
 	upstreamMeta := o.GetUpstreamMetadata()
 	oclient, err := oauth.NewClient(oauth.ClientArgs{
 		ClientJwk:   o.upstreamJWK,

@@ -1,4 +1,4 @@
-package oproxy
+package oatproxy
 
 import (
 	"context"
@@ -34,7 +34,7 @@ type PARResponse struct {
 
 var ErrFirstNonce = echo.NewHTTPError(http.StatusBadRequest, "first time seeing this key, come back with a nonce")
 
-func (o *OProxy) HandleOAuthPAR(c echo.Context) error {
+func (o *OATProxy) HandleOAuthPAR(c echo.Context) error {
 	ctx, span := otel.Tracer("server").Start(c.Request().Context(), "HandleOAuthPAR")
 	defer span.End()
 	c.Response().Header().Set("Access-Control-Allow-Origin", "*")
@@ -61,7 +61,7 @@ func (o *OProxy) HandleOAuthPAR(c echo.Context) error {
 	return c.JSON(http.StatusCreated, resp)
 }
 
-func (o *OProxy) NewPAR(ctx context.Context, c echo.Context, par *PAR, dpopHeader string) (*PARResponse, error) {
+func (o *OATProxy) NewPAR(ctx context.Context, c echo.Context, par *PAR, dpopHeader string) (*PARResponse, error) {
 	jkt, claims, err := getJKT(dpopHeader)
 	if err != nil {
 		return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to get JKT from DPoP header header=%s: %s", dpopHeader, err))
