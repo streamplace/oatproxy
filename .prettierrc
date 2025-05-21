@@ -1,0 +1,11 @@
+{
+  "proseWrap": "always",
+  "overrides": [
+    {
+      "files": "*.yml",
+      "options": {
+        "proseWrap": "preserve"
+      }
+    }
+  ]
+}
