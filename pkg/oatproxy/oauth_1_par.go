@@ -154,6 +154,11 @@ func (o *OATProxy) NewPAR(ctx context.Context, c echo.Context, par *PAR, dpopHea
 		return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("invalid scope (expected %s, got %s)", o.scope, par.Scope))
 	}
 
+	realRedirectURI, err := redirectTruther(par.RedirectURI)
+	if err != nil {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("invalid redirect_uri: %s", err))
+	}
+
 	urn := makeURN(jkt)
 
 	err = o.updateOAuthSession(jkt, &OAuthSession{
@@ -161,7 +166,7 @@ func (o *OATProxy) NewPAR(ctx context.Context, c echo.Context, par *PAR, dpopHea
 		DownstreamPARRequestURI: urn,
 		DownstreamCodeChallenge: par.CodeChallenge,
 		DownstreamState:         par.State,
-		DownstreamRedirectURI:   par.RedirectURI,
+		DownstreamRedirectURI:   realRedirectURI,
 		Handle:                  par.LoginHint,
 	})
 	if err != nil {

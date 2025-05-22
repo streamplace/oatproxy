@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 
-	"github.com/streamplace/atproto-oauth-golang/helpers"
 	"github.com/labstack/echo/v4"
+	"github.com/streamplace/atproto-oauth-golang/helpers"
 )
 
 func (o *OATProxy) HandleOAuthAuthorizationServer(c echo.Context) error {
@@ -131,5 +132,66 @@ func (o *OATProxy) GetDownstreamMetadata(redirectURI string) (*OAuthClientMetada
 		}
 		meta.RedirectURIs = []string{redirectURI}
 	}
+
+	for i, uri := range meta.RedirectURIs {
+		lie, err := redirectLiar(uri, meta.ClientURI)
+		if err != nil {
+			return nil, err
+		}
+		meta.RedirectURIs[i] = lie
+	}
+
 	return &meta, nil
+}
+
+const REDIRECT_LIAR_QUERY_PARAM = "oatproxyActualRedirect"
+
+func redirectLiar(redirectURI string, clientURI string) (string, error) {
+	redirectURL, err := url.Parse(redirectURI)
+	if err != nil {
+		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("invalid redirect_uri: %s", redirectURI))
+	}
+	clientURL, err := url.Parse(clientURI)
+	if err != nil {
+		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("invalid client_uri: %s", clientURI))
+	}
+
+	if redirectURL.Host == clientURL.Host {
+		return redirectURI, nil
+	}
+
+	// When redirect URI host doesn't match client URI host, create a special redirect URL
+	// that points to the client host with the actual redirect as a query parameter
+	encodedRedirect := url.QueryEscape(redirectURI)
+	return fmt.Sprintf("https://%s?%s=%s", clientURL.Host, REDIRECT_LIAR_QUERY_PARAM, encodedRedirect), nil
+}
+
+// redirectTruther detects if a URL contains an actualRedirect query parameter
+// and returns the real redirect URL if found, otherwise returns the original URL unchanged
+func redirectTruther(redirectURI string) (string, error) {
+	redirectURL, err := url.Parse(redirectURI)
+	if err != nil {
+		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("invalid redirect_uri: %s", redirectURI))
+	}
+
+	// Check if the URL has an actualRedirect query parameter
+	actualRedirect := redirectURL.Query().Get(REDIRECT_LIAR_QUERY_PARAM)
+	if actualRedirect == "" {
+		// No actualRedirect parameter, return the original URL
+		return redirectURI, nil
+	}
+
+	// Decode the actualRedirect parameter
+	decodedRedirect, err := url.QueryUnescape(actualRedirect)
+	if err != nil {
+		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("invalid actualRedirect parameter: %s", actualRedirect))
+	}
+
+	// Validate that the decoded redirect is a valid URL
+	_, err = url.Parse(decodedRedirect)
+	if err != nil {
+		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("invalid actualRedirect URL: %s", decodedRedirect))
+	}
+
+	return decodedRedirect, nil
 }
