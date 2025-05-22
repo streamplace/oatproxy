@@ -1,5 +1,3 @@
-github.com/AxisCommunications/go-dpop v1.1.2 h1:ICgk/8crE7pmWo5MML1kzyHF9wVJg6a78fW7rKxFavg=
-github.com/AxisCommunications/go-dpop v1.1.2/go.mod h1:bGUXY9Wd4mnd+XUrOYZr358J2f6z9QO/dLhL1SsiD+0=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/benbjohnson/clock v1.1.0/go.mod h1:J11/hYXuz8f4ySSvYwY0FKfm+ezbsZBKZxNJlLklBHA=
 github.com/bluesky-social/indigo v0.0.0-20250520232546-236dd575c91e h1:DVD+HxQsDCVJtAkjfIKZVaBNc3kayHaU+A2TJZkFdp4=
@@ -158,6 +156,8 @@ github.com/spaolacci/murmur3 v1.1.0 h1:7c1g84S4BPRrfL5Xrdp6fOJ206sU9y293DDHaoy0b
 github.com/spaolacci/murmur3 v1.1.0/go.mod h1:JwIasOWyU6f++ZhiEuf87xNszmSA2myDM2Kzu9HwQUA=
 github.com/streamplace/atproto-oauth-golang v0.0.0-20250521042753-9cfa9e504155 h1:OAJ2Hh9XQcU77aUdxgT5tTcGKLYzwCXvPWR22V5xV5o=
 github.com/streamplace/atproto-oauth-golang v0.0.0-20250521042753-9cfa9e504155/go.mod h1:/AUT+i6CBJJ13AWx89XyvFdSkmDT3IoEg8pl34MaUgs=
+github.com/streamplace/go-dpop v0.0.0-20250510031900-c897158a8ad4 h1:L1fS4HJSaAyNnkwfuZubgfeZy8rkWmA0cMtH5Z0HqNc=
+github.com/streamplace/go-dpop v0.0.0-20250510031900-c897158a8ad4/go.mod h1:bGUXY9Wd4mnd+XUrOYZr358J2f6z9QO/dLhL1SsiD+0=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/testify v1.2.2/go.mod h1:a8OnRcib4nhh0OaRAV+Yts87kKdq0PP7pXfy6kDkUVs=
 github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UVUgZn+9EI=

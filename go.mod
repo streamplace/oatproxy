@@ -2,6 +2,8 @@ module github.com/streamplace/oatproxy
 
 go 1.24.2
 
+replace github.com/AxisCommunications/go-dpop => github.com/streamplace/go-dpop v0.0.0-20250510031900-c897158a8ad4
+
 require (
 	github.com/AxisCommunications/go-dpop v1.1.2
 	github.com/bluesky-social/indigo v0.0.0-20250520232546-236dd575c91e
