@@ -2,16 +2,19 @@ package oatproxy
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/xrpc"
-	oauth "github.com/streamplace/atproto-oauth-golang"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v4"
 	"github.com/lestrrat-go/jwx/v2/jwk"
+	oauth "github.com/streamplace/atproto-oauth-golang"
 	"go.opentelemetry.io/otel"
 )
 
@@ -99,7 +102,7 @@ func (o *OATProxy) Return(ctx context.Context, code string, iss string, state st
 	}
 	now := time.Now()
 
-	if itResp.Sub != session.DID {
+	if session.DID != "" && itResp.Sub != session.DID {
 		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("sub mismatch: %s != %s", itResp.Sub, session.DID))
 	}
 
@@ -117,7 +120,24 @@ func (o *OATProxy) Return(ctx context.Context, code string, iss string, state st
 	session.UpstreamAccessTokenExp = &expiry
 	session.UpstreamRefreshToken = itResp.RefreshToken
 	session.DownstreamAuthorizationCode = downstreamCode
-
+	if session.DID == "" {
+		_, handle, err := ResolveService(ctx, itResp.Sub)
+		if err != nil {
+			return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to resolve service for DID '%s': %s", itResp.Sub, err))
+		}
+		session.DID = itResp.Sub
+		session.Handle = handle
+		claims := jwt.RegisteredClaims{}
+		parser := jwt.NewParser()
+		_, _, err = parser.ParseUnverified(session.UpstreamAccessToken, &claims)
+		if err != nil && !errors.Is(err, jwt.ErrTokenUnverifiable) {
+			return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to parse access token: %s", err))
+		}
+		if !strings.HasPrefix(claims.Audience[0], "did:web:") {
+			return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("invalid audience: %s", claims.Audience[0]))
+		}
+		session.PDSUrl = fmt.Sprintf("https://%s", strings.TrimPrefix(claims.Audience[0], "did:web:"))
+	}
 	authArgs := &oauth.XrpcAuthedRequestArgs{
 		Did:            session.DID,
 		AccessToken:    session.UpstreamAccessToken,
@@ -134,6 +154,7 @@ func (o *OATProxy) Return(ctx context.Context, code string, iss string, state st
 	// brief check to make sure we can actually do stuff
 	var out atproto.ServerCheckAccountStatus_Output
 	if err := xrpcClient.Do(ctx, authArgs, xrpc.Query, "application/json", "com.atproto.server.checkAccountStatus", nil, nil, &out); err != nil {
+		o.slog.Error("failed to check account status", "error", err, "pdsUrl", session.PDSUrl, "issuer", session.UpstreamAuthServerIssuer, "accessToken", session.UpstreamAccessToken)
 		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to check account status: %s", err))
 	}
 

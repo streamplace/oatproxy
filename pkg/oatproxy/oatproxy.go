@@ -20,6 +20,7 @@ type OATProxy struct {
 	downstreamJWK       jwk.Key
 	slog                *slog.Logger
 	clientMetadata      *OAuthClientMetadata
+	defaultPDS          string
 }
 
 type Config struct {
@@ -32,6 +33,7 @@ type Config struct {
 	DownstreamJWK      jwk.Key
 	Slog               *slog.Logger
 	ClientMetadata     *OAuthClientMetadata
+	DefaultPDS         string
 }
 
 func New(conf *Config) *OATProxy {
@@ -51,6 +53,7 @@ func New(conf *Config) *OATProxy {
 		downstreamJWK:       conf.DownstreamJWK,
 		slog:                mySlog,
 		clientMetadata:      conf.ClientMetadata,
+		defaultPDS:          conf.DefaultPDS,
 	}
 	o.Echo.GET("/.well-known/oauth-authorization-server", o.HandleOAuthAuthorizationServer)
 	o.Echo.GET("/.well-known/oauth-protected-resource", o.HandleOAuthProtectedResource)

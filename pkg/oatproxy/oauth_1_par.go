@@ -142,7 +142,7 @@ func (o *OATProxy) NewPAR(ctx context.Context, c echo.Context, par *PAR, dpopHea
 		return nil, echo.NewHTTPError(http.StatusBadRequest, "invalid scope")
 	}
 
-	if par.LoginHint == "" {
+	if par.LoginHint == "" && o.defaultPDS == "" {
 		return nil, echo.NewHTTPError(http.StatusBadRequest, "login hint is required to find your PDS")
 	}
 

@@ -8,9 +8,9 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/labstack/echo/v4"
 	oauth "github.com/streamplace/atproto-oauth-golang"
 	"github.com/streamplace/atproto-oauth-golang/helpers"
-	"github.com/labstack/echo/v4"
 	"go.opentelemetry.io/otel"
 )
 
@@ -105,16 +105,25 @@ func (o *OATProxy) Authorize(ctx context.Context, requestURI, clientID string) (
 		return "", echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("failed to create OAuth client: %s", err))
 	}
 
-	did, err := ResolveHandle(ctx, session.Handle)
-	if err != nil {
-		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to resolve handle '%s': %s", session.DID, err))
-	}
+	var service string
+	var did string
+	if session.Handle != "" {
+		did, err = ResolveHandle(ctx, session.Handle)
+		if err != nil {
+			return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to resolve handle '%s': %s", session.DID, err))
+		}
 
-	service, err := ResolveService(ctx, did)
-	if err != nil {
-		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to resolve service for DID '%s': %s", did, err))
+		var handle2 string
+		service, handle2, err = ResolveService(ctx, did)
+		if err != nil {
+			return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to resolve service for DID '%s': %s", did, err))
+		}
+		if handle2 != session.Handle {
+			return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("handle mismatch: %s != %s", handle2, session.Handle))
+		}
+	} else {
+		service = o.defaultPDS
 	}
-
 	authserver, err := oclient.ResolvePdsAuthServer(ctx, service)
 	if err != nil {
 		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to resolve PDS auth server for service '%s': %s", service, err))

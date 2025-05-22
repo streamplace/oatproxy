@@ -73,9 +73,10 @@ func ResolveHandle(ctx context.Context, handle string) (string, error) {
 	return did, nil
 }
 
-func ResolveService(ctx context.Context, did string) (string, error) {
+func ResolveService(ctx context.Context, did string) (string, string, error) {
 	type Identity struct {
-		Service []struct {
+		AlsoKnownAs []string `json:"alsoKnownAs"`
+		Service     []struct {
 			ID              string `json:"id"`
 			Type            string `json:"type"`
 			ServiceEndpoint string `json:"serviceEndpoint"`
@@ -88,28 +89,28 @@ func ResolveService(ctx context.Context, did string) (string, error) {
 	} else if strings.HasPrefix(did, "did:web:") {
 		ustr = fmt.Sprintf("https://%s/.well-known/did.json", strings.TrimPrefix(did, "did:web:"))
 	} else {
-		return "", fmt.Errorf("did was not a supported did type")
+		return "", "", fmt.Errorf("did was not a supported did type")
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "GET", ustr, nil)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
 		io.Copy(io.Discard, resp.Body)
-		return "", fmt.Errorf("could not find identity in plc registry")
+		return "", "", fmt.Errorf("could not find identity in plc registry")
 	}
 
 	var identity Identity
 	if err := json.NewDecoder(resp.Body).Decode(&identity); err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	var service string
@@ -120,10 +121,19 @@ func ResolveService(ctx context.Context, did string) (string, error) {
 	}
 
 	if service == "" {
-		return "", fmt.Errorf("could not find atproto_pds service in identity services")
+		return "", "", fmt.Errorf("could not find atproto_pds service in identity services")
 	}
 
-	return service, nil
+	handle := did
+	if len(identity.AlsoKnownAs) > 0 {
+		handle = identity.AlsoKnownAs[0]
+		if !strings.HasPrefix(handle, "at://") {
+			return "", "", fmt.Errorf("handle is not a valid atproto handle: %s", handle)
+		}
+		handle = strings.TrimPrefix(handle, "at://")
+	}
+
+	return service, handle, nil
 }
 
 func HandleComAtprotoIdentityResolveHandle(c echo.Context) error {
