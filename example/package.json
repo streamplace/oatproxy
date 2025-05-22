@@ -1,0 +1,22 @@
+{
+  "name": "example",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@9.13.2+sha512.88c9c3864450350e65a33587ab801acf946d7c814ed1134da4a924f6df5a2120fd36b46aab68f7cd1d413149112d53c7db3a4136624cfd00ff1846a0c6cef48a",
+  "dependencies": {
+    "@atproto/api": "^0.15.8",
+    "@atproto/oauth-client-browser": "^0.3.17",
+    "@types/react": "^19.1.5",
+    "@types/react-dom": "^19.1.5",
+    "esbuild": "^0.25.4",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  }
+}
