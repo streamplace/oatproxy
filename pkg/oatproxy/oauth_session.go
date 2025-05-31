@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	oauth "github.com/streamplace/atproto-oauth-golang"
 	"github.com/lestrrat-go/jwx/v2/jwk"
+	oauth "github.com/streamplace/atproto-oauth-golang"
 )
 
 var refreshWhenRemaining = time.Minute * 15
@@ -142,6 +142,10 @@ func (o *OAuthSession) CacheJTI(jti string) error {
 }
 
 func (o *OATProxy) getOAuthSession(jkt string) (*OAuthSession, error) {
+	lock := o.locks.GetLock(jkt)
+	lock.Lock()
+	defer lock.Unlock()
+
 	session, err := o.userGetOAuthSession(jkt)
 	if err != nil {
 		return nil, err
@@ -179,17 +183,17 @@ func (o *OATProxy) getOAuthSession(jkt string) (*OAuthSession, error) {
 	}
 
 	// refresh upstream before returning
-	resp, err := oclient.RefreshTokenRequest(context.Background(), session.UpstreamRefreshToken, session.UpstreamAuthServerIssuer, session.UpstreamDPoPNonce, dpopKey)
-	if err != nil {
+	resp, refreshErr := oclient.RefreshTokenRequest(context.Background(), session.UpstreamRefreshToken, session.UpstreamAuthServerIssuer, session.UpstreamDPoPNonce, dpopKey)
+	if refreshErr != nil {
 		// revoke, probably
-		o.slog.Error("failed to refresh upstream token, revoking downstream session", "error", err)
+		o.slog.Error("failed to refresh upstream token, revoking downstream session", "error", refreshErr)
 		now := time.Now()
 		session.RevokedAt = &now
 		err = o.updateOAuthSession(session.DownstreamDPoPJKT, session)
 		if err != nil {
 			o.slog.Error("after upstream token refresh, failed to revoke downstream session", "error", err)
 		}
-		return nil, fmt.Errorf("failed to refresh upstream token: %w", err)
+		return nil, fmt.Errorf("failed to refresh upstream token: %w", refreshErr)
 	}
 
 	exp := time.Now().Add(time.Second * time.Duration(resp.ExpiresIn)).UTC()
@@ -202,7 +206,7 @@ func (o *OATProxy) getOAuthSession(jkt string) (*OAuthSession, error) {
 		return nil, fmt.Errorf("failed to update downstream session after upstream token refresh: %w", err)
 	}
 
-	o.slog.Debug("refreshed upstream token", "session", session.DownstreamDPoPJKT)
+	o.slog.Info("refreshed upstream token", "session", session.DownstreamDPoPJKT, "did", session.DID)
 
 	return session, nil
 }

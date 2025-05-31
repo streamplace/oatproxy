@@ -170,8 +170,6 @@ func (o *OATProxy) OAuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 		c.Set("session", session)
 		c.Set("oproxy", o)
 
-		o.slog.Info("msg", "oauth middleware", "session", session.DownstreamDPoPJKT)
-
 		// Also set it in request context for non-echo handlers
 		ctx := c.Request().Context()
 		ctx = context.WithValue(ctx, oatproxyContextKeyType{}, o)

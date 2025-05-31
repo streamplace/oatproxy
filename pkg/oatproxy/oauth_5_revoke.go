@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"time"
@@ -46,6 +47,7 @@ func (o *OATProxy) Revoke(ctx context.Context, dpopHeader string, revokeRequest 
 	}
 
 	now := time.Now()
+	slog.Info("revoking session by user request", "session", session.DownstreamDPoPJKT, "did", session.DID)
 	session.RevokedAt = &now
 	err = o.updateOAuthSession(session.DownstreamDPoPJKT, session)
 	if err != nil {

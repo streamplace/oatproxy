@@ -21,6 +21,7 @@ type OATProxy struct {
 	slog                *slog.Logger
 	clientMetadata      *OAuthClientMetadata
 	defaultPDS          string
+	locks               *NamedLocks
 }
 
 type Config struct {
@@ -54,6 +55,8 @@ func New(conf *Config) *OATProxy {
 		slog:                mySlog,
 		clientMetadata:      conf.ClientMetadata,
 		defaultPDS:          conf.DefaultPDS,
+		// todo: this is fine for sqlite but we'll need to do an advisory lock for postgres
+		locks: NewNamedLocks(),
 	}
 	o.Echo.GET("/.well-known/oauth-authorization-server", o.HandleOAuthAuthorizationServer)
 	o.Echo.GET("/.well-known/oauth-protected-resource", o.HandleOAuthProtectedResource)
