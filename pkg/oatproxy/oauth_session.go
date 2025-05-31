@@ -141,6 +141,10 @@ func (o *OAuthSession) CacheJTI(jti string) error {
 	return nil
 }
 
+func (o *OATProxy) RefreshIfNeeded(session *OAuthSession) (*OAuthSession, error) {
+	return o.getOAuthSession(session.DownstreamDPoPJKT)
+}
+
 func (o *OATProxy) getOAuthSession(jkt string) (*OAuthSession, error) {
 	lock := o.locks.GetLock(jkt)
 	lock.Lock()
@@ -156,6 +160,7 @@ func (o *OATProxy) getOAuthSession(jkt string) (*OAuthSession, error) {
 	if session.Status() != OAuthSessionStateReady {
 		return session, nil
 	}
+
 	if session.UpstreamAccessTokenExp.Sub(time.Now()) > refreshWhenRemaining {
 		return session, nil
 	}
