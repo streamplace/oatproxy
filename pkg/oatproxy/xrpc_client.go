@@ -6,9 +6,9 @@ import (
 	"net/http"
 
 	"github.com/bluesky-social/indigo/xrpc"
-	oauth "github.com/streamplace/atproto-oauth-golang"
 	"github.com/labstack/echo/v4"
 	"github.com/lestrrat-go/jwx/v2/jwk"
+	oauth "github.com/streamplace/atproto-oauth-golang"
 )
 
 var xrpcClient *oauth.XrpcClient
@@ -50,7 +50,7 @@ func (o *OATProxy) GetXrpcClient(session *OAuthSession) (*XrpcClient, error) {
 	return &XrpcClient{client: xrpcClient, authArgs: authArgs}, nil
 }
 
-func (c *XrpcClient) Do(ctx context.Context, kind xrpc.XRPCRequestType, inpenc, method string, params map[string]any, bodyobj any, out any) error {
+func (c *XrpcClient) Do(ctx context.Context, kind string, inpenc, method string, params map[string]any, bodyobj any, out any) error {
 	err := c.client.Do(ctx, c.authArgs, kind, inpenc, method, params, bodyobj, out)
 	if err == nil {
 		return nil
