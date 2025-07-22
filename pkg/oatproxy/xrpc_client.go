@@ -61,3 +61,7 @@ func (c *XrpcClient) Do(ctx context.Context, kind string, inpenc, method string,
 	}
 	return xErr
 }
+
+func (c *XrpcClient) SetHeaders(headers map[string]string) {
+	c.client.Headers = headers
+}
