@@ -13,6 +13,7 @@ type OATProxy struct {
 	createOAuthSession  func(id string, session *OAuthSession) error
 	updateOAuthSession  func(id string, session *OAuthSession) error
 	userGetOAuthSession func(id string) (*OAuthSession, error)
+	lock                func(id string) (func(), error)
 	Echo                *echo.Echo
 	host                string
 	scope               string
@@ -21,20 +22,22 @@ type OATProxy struct {
 	slog                *slog.Logger
 	clientMetadata      *OAuthClientMetadata
 	defaultPDS          string
-	locks               *NamedLocks
 }
 
 type Config struct {
 	CreateOAuthSession func(id string, session *OAuthSession) error
 	UpdateOAuthSession func(id string, session *OAuthSession) error
 	GetOAuthSession    func(id string) (*OAuthSession, error)
-	Host               string
-	Scope              string
-	UpstreamJWK        jwk.Key
-	DownstreamJWK      jwk.Key
-	Slog               *slog.Logger
-	ClientMetadata     *OAuthClientMetadata
-	DefaultPDS         string
+	// Lock on the given key, return a function to unlock. If not provided, OATProxy will use a local lock,
+	// but you'll run into trouble with multiple nodes attempting to refresh the same session at the same time.
+	Lock           func(id string) (func(), error)
+	Host           string
+	Scope          string
+	UpstreamJWK    jwk.Key
+	DownstreamJWK  jwk.Key
+	Slog           *slog.Logger
+	ClientMetadata *OAuthClientMetadata
+	DefaultPDS     string
 }
 
 func New(conf *Config) *OATProxy {
@@ -55,9 +58,20 @@ func New(conf *Config) *OATProxy {
 		slog:                mySlog,
 		clientMetadata:      conf.ClientMetadata,
 		defaultPDS:          conf.DefaultPDS,
-		// todo: this is fine for sqlite but we'll need to do an advisory lock for postgres
-		locks: NewNamedLocks(),
 	}
+	if conf.Lock != nil {
+		o.lock = conf.Lock
+	} else {
+		locks := NewNamedLocks()
+		o.lock = func(id string) (func(), error) {
+			lock := locks.GetLock(id)
+			lock.Lock()
+			return func() {
+				lock.Unlock()
+			}, nil
+		}
+	}
+
 	o.Echo.GET("/.well-known/oauth-authorization-server", o.HandleOAuthAuthorizationServer)
 	o.Echo.GET("/.well-known/oauth-protected-resource", o.HandleOAuthProtectedResource)
 	o.Echo.GET("/xrpc/com.atproto.identity.resolveHandle", HandleComAtprotoIdentityResolveHandle)

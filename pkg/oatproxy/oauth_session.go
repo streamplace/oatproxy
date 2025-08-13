@@ -146,9 +146,11 @@ func (o *OATProxy) RefreshIfNeeded(session *OAuthSession) (*OAuthSession, error)
 }
 
 func (o *OATProxy) getOAuthSession(jkt string) (*OAuthSession, error) {
-	lock := o.locks.GetLock(jkt)
-	lock.Lock()
-	defer lock.Unlock()
+	unlock, err := o.lock(jkt)
+	if err != nil {
+		return nil, fmt.Errorf("failed to lock session: %w", err)
+	}
+	defer unlock()
 
 	session, err := o.userGetOAuthSession(jkt)
 	if err != nil {
