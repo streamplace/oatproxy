@@ -4,7 +4,7 @@
   "policy_uri": "https://example.com/policy",
   "tos_uri": "https://example.com/terms",
   "logo_uri": "https://example.com/logo.png",
-  "redirect_uris": ["https://example.com/login"],
+  "redirect_uris": ["http://127.0.0.1:38080/login"],
   "scope": "atproto transition:generic",
   "contacts": ["admin@example.com"]
 }
