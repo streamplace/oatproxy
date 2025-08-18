@@ -117,12 +117,21 @@ func (o *OATProxy) NewPAR(ctx context.Context, c echo.Context, par *PAR, dpopHea
 	if err != nil {
 		return nil, err
 	}
-	if par.ClientID != clientMetadata.ClientID {
-		return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("invalid client_id: expected %s, got %s", clientMetadata.ClientID, par.ClientID))
-	}
+	// if par.ClientID != clientMetadata.ClientID {
+	// 	return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("invalid client_id: expected %s, got %s", clientMetadata.ClientID, par.ClientID))
+	// }
 
-	if !slices.Contains(clientMetadata.RedirectURIs, par.RedirectURI) {
-		return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("invalid redirect_uri: %s not in allowed URIs", par.RedirectURI))
+	lie, err := redirectLiar(par.RedirectURI, clientMetadata.ClientURI)
+	if err != nil {
+		return nil, err
+	}
+	if !slices.Contains(clientMetadata.RedirectURIs, lie) {
+		msg := fmt.Sprintf("invalid redirect_uri: %s is not in allowed URIs", par.RedirectURI)
+		bs, err := json.Marshal(clientMetadata.RedirectURIs)
+		if err == nil {
+			msg = fmt.Sprintf("%s (%s)", msg, string(bs))
+		}
+		return nil, echo.NewHTTPError(http.StatusBadRequest, msg)
 	}
 
 	if par.CodeChallengeMethod != "S256" {
