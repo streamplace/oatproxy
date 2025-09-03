@@ -2,7 +2,6 @@ package oatproxy
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -16,15 +15,15 @@ import (
 )
 
 type PAR struct {
-	ClientID            string `json:"client_id"`
-	RedirectURI         string `json:"redirect_uri"`
-	CodeChallenge       string `json:"code_challenge"`
-	CodeChallengeMethod string `json:"code_challenge_method"`
-	State               string `json:"state"`
-	LoginHint           string `json:"login_hint"`
-	ResponseMode        string `json:"response_mode"`
-	ResponseType        string `json:"response_type"`
-	Scope               string `json:"scope"`
+	ClientID            string `json:"client_id" form:"client_id"`
+	RedirectURI         string `json:"redirect_uri" form:"redirect_uri"`
+	CodeChallenge       string `json:"code_challenge" form:"code_challenge"`
+	CodeChallengeMethod string `json:"code_challenge_method" form:"code_challenge_method"`
+	State               string `json:"state" form:"state"`
+	LoginHint           string `json:"login_hint" form:"login_hint"`
+	ResponseMode        string `json:"response_mode" form:"response_mode"`
+	ResponseType        string `json:"response_type" form:"response_type"`
+	Scope               string `json:"scope" form:"scope"`
 }
 
 type PARResponse struct {
@@ -39,7 +38,7 @@ func (o *OATProxy) HandleOAuthPAR(c echo.Context) error {
 	defer span.End()
 	c.Response().Header().Set("Access-Control-Allow-Origin", "*")
 	var par PAR
-	if err := json.NewDecoder(c.Request().Body).Decode(&par); err != nil {
+	if err := c.Bind(&par); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 

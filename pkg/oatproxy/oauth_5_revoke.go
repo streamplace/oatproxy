@@ -2,7 +2,6 @@ package oatproxy
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -18,7 +17,7 @@ func (o *OATProxy) HandleOAuthRevoke(c echo.Context) error {
 	ctx, span := otel.Tracer("server").Start(c.Request().Context(), "HandleOAuthRevoke")
 	defer span.End()
 	var revokeRequest RevokeRequest
-	if err := json.NewDecoder(c.Request().Body).Decode(&revokeRequest); err != nil {
+	if err := c.Bind(&revokeRequest); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("invalid request: %s", err))
 	}
 	dpopHeader := c.Request().Header.Get("DPoP")

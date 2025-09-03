@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -18,17 +17,17 @@ import (
 )
 
 type TokenRequest struct {
-	GrantType    string `json:"grant_type"`
-	RedirectURI  string `json:"redirect_uri"`
-	Code         string `json:"code"`
-	CodeVerifier string `json:"code_verifier"`
-	ClientID     string `json:"client_id"`
-	RefreshToken string `json:"refresh_token"`
+	GrantType    string `json:"grant_type" form:"grant_type"`
+	RedirectURI  string `json:"redirect_uri" form:"redirect_uri"`
+	Code         string `json:"code" form:"code"`
+	CodeVerifier string `json:"code_verifier" form:"code_verifier"`
+	ClientID     string `json:"client_id" form:"client_id"`
+	RefreshToken string `json:"refresh_token" form:"refresh_token"`
 }
 
 type RevokeRequest struct {
-	Token    string `json:"token"`
-	ClientID string `json:"client_id"`
+	Token    string `json:"token" form:"token"`
+	ClientID string `json:"client_id" form:"client_id"`
 }
 
 type TokenResponse struct {
@@ -48,7 +47,7 @@ func (o *OATProxy) HandleOAuthToken(c echo.Context) error {
 	ctx, span := otel.Tracer("server").Start(c.Request().Context(), "HandleOAuthToken")
 	defer span.End()
 	var tokenRequest TokenRequest
-	if err := json.NewDecoder(c.Request().Body).Decode(&tokenRequest); err != nil {
+	if err := c.Bind(&tokenRequest); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("invalid request: %s", err))
 	}
 
