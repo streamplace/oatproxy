@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
@@ -146,12 +147,6 @@ func (o *OATProxy) RefreshIfNeeded(session *OAuthSession) (*OAuthSession, error)
 }
 
 func (o *OATProxy) getOAuthSession(jkt string) (*OAuthSession, error) {
-	unlock, err := o.lock(jkt)
-	if err != nil {
-		return nil, fmt.Errorf("failed to lock session: %w", err)
-	}
-	defer unlock()
-
 	session, err := o.userGetOAuthSession(jkt)
 	if err != nil {
 		return nil, err
@@ -163,7 +158,34 @@ func (o *OATProxy) getOAuthSession(jkt string) (*OAuthSession, error) {
 		return session, nil
 	}
 
-	if session.UpstreamAccessTokenExp.Sub(time.Now()) > refreshWhenRemaining {
+	timeUntilExpiry := time.Until(*session.UpstreamAccessTokenExp)
+	// Add some randomization to prevent multiple nodes from refreshing at the same time
+	jitter := time.Duration(rand.Int63n(int64(refreshWhenRemaining / 4)))
+	if timeUntilExpiry > refreshWhenRemaining+jitter {
+		return session, nil
+	}
+
+	// nobody do anything until refresh
+	unlock, err := o.lock(jkt)
+	if err != nil {
+		return nil, fmt.Errorf("failed to lock session: %w", err)
+	}
+	defer unlock()
+
+	oldSession := session
+	// need to reload in case somebody else just refreshed
+	session, err = o.userGetOAuthSession(jkt)
+	if err != nil {
+		return nil, err
+	}
+	if session == nil {
+		return nil, nil
+	}
+	if !oldSession.UpstreamAccessTokenExp.Equal(*session.UpstreamAccessTokenExp) {
+		// someone else refreshed, that's chill
+		return session, nil
+	}
+	if session.Status() != OAuthSessionStateReady {
 		return session, nil
 	}
 
