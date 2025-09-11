@@ -59,14 +59,6 @@ func (o *OATProxy) HandleOAuthAuthorize(c echo.Context) error {
 
 // downstream --> upstream transition; attempt to send user to the upstream auth server
 func (o *OATProxy) Authorize(ctx context.Context, requestURI, clientID string) (string, *echo.HTTPError) {
-	downstreamMeta, err := o.GetDownstreamMetadata("")
-	if err != nil {
-		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to get downstream metadata: %s", err))
-	}
-	if downstreamMeta.ClientID != clientID {
-		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("client ID mismatch: %s != %s", downstreamMeta.ClientID, clientID))
-	}
-
 	jkt, _, err := parseURN(requestURI)
 	if err != nil {
 		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to parse URN: %s", err))
@@ -75,6 +67,14 @@ func (o *OATProxy) Authorize(ctx context.Context, requestURI, clientID string) (
 	session, err := o.getOAuthSession(jkt)
 	if err != nil {
 		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to load OAuth session jkt=%s: %s", jkt, err))
+	}
+
+	downstreamMeta, err := o.GetDownstreamMetadata(session.DownstreamRedirectURI)
+	if err != nil {
+		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to get downstream metadata: %s", err))
+	}
+	if !compareURLs(downstreamMeta.ClientID, clientID) {
+		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("client ID mismatch: %s != %s", downstreamMeta.ClientID, clientID))
 	}
 
 	if session == nil {
@@ -97,11 +97,7 @@ func (o *OATProxy) Authorize(ctx context.Context, requestURI, clientID string) (
 	}
 
 	upstreamMeta := o.GetUpstreamMetadata()
-	oclient, err := oauth.NewClient(oauth.ClientArgs{
-		ClientJwk:   o.upstreamJWK,
-		ClientId:    upstreamMeta.ClientID,
-		RedirectUri: upstreamMeta.RedirectURIs[0],
-	})
+	oclient, err := o.GetOauthClient()
 	if err != nil {
 		return "", echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("failed to create OAuth client: %s", err))
 	}
@@ -114,6 +110,11 @@ func (o *OATProxy) Authorize(ctx context.Context, requestURI, clientID string) (
 			// we'll properly populate this after signup completes
 			service = session.Handle
 		} else {
+			var httpErr *echo.HTTPError
+			did, service, httpErr = ResolveHandleAndService(ctx, session.Handle)
+			if httpErr != nil {
+				return "", httpErr
+			}
 			did, err = ResolveHandle(ctx, session.Handle)
 			if err != nil {
 				return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to resolve handle '%s': %s", session.Handle, err))

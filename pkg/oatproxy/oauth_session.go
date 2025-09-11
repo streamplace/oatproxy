@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
-	oauth "github.com/streamplace/atproto-oauth-golang"
 )
 
 var refreshWhenRemaining = time.Minute * 15
@@ -28,6 +27,7 @@ type OAuthSession struct {
 	UpstreamAccessToken      string     `json:"upstream_access_token" gorm:"column:upstream_access_token"`
 	UpstreamAccessTokenExp   *time.Time `json:"upstream_access_token_exp" gorm:"column:upstream_access_token_exp"`
 	UpstreamRefreshToken     string     `json:"upstream_refresh_token" gorm:"column:upstream_refresh_token"`
+	UpstreamAuthServerURL    string     `json:"upstream_auth_server_url" gorm:"column:upstream_auth_server_url"`
 
 	// Downstream fields
 	DownstreamDPoPNoncePad      string     `json:"downstream_dpop_nonce_pad" gorm:"column:downstream_dpop_nonce_pad"`
@@ -198,13 +198,7 @@ func (o *OATProxy) getOAuthSession(jkt string) (*OAuthSession, error) {
 		}
 	}
 
-	upstreamMeta := o.GetUpstreamMetadata()
-
-	oclient, err := oauth.NewClient(oauth.ClientArgs{
-		ClientJwk:   o.upstreamJWK,
-		ClientId:    upstreamMeta.ClientID,
-		RedirectUri: upstreamMeta.RedirectURIs[0],
-	})
+	oclient, err := o.GetOauthClient()
 
 	dpopKey, err := jwk.ParseKey([]byte(session.UpstreamDPoPPrivateJWK))
 	if err != nil {

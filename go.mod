@@ -4,6 +4,8 @@ go 1.24.2
 
 replace github.com/AxisCommunications/go-dpop => github.com/streamplace/go-dpop v0.0.0-20250510031900-c897158a8ad4
 
+replace github.com/streamplace/atproto-oauth-golang => ../atproto-oauth-golang
+
 require (
 	github.com/AxisCommunications/go-dpop v1.1.2
 	github.com/bluesky-social/indigo v0.0.0-20250617211950-336ebe49427b

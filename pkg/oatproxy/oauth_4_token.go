@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
-	"net/url"
 	"time"
 
 	"github.com/AxisCommunications/go-dpop"
@@ -55,42 +54,37 @@ func (o *OATProxy) HandleOAuthToken(c echo.Context) error {
 	if dpopHeader == "" {
 		return echo.NewHTTPError(http.StatusUnauthorized, "DPoP header is required")
 	}
-
-	res, err := o.Token(ctx, &tokenRequest, dpopHeader)
-	if err != nil {
-		return err
-	}
 	jkt, _, err := getJKT(dpopHeader)
 	if err != nil {
 		return err
 	}
-	sess, err := o.getOAuthSession(jkt)
+	session, err := o.getOAuthSession(jkt)
 	if err != nil {
 		return err
 	}
-	if sess == nil {
+	if session == nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "session not found")
 	}
-	nonces := generateValidNonces(sess.DownstreamDPoPNoncePad, time.Now())
+
+	res, err := o.Token(ctx, &tokenRequest, dpopHeader, session)
+	if err != nil {
+		return err
+	}
+	fmt.Println("expected URL", o.authServerURL(session, "/oauth/token"))
+	_, err = dpop.Parse(dpopHeader, dpop.POST, o.authServerURL(session, "/oauth/token"), dpop.ParseOptions{
+		Nonce:      "",
+		TimeWindow: &dpopTimeWindow,
+	})
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("invalid DPoP proof: %s", err))
+	}
+	nonces := generateValidNonces(session.DownstreamDPoPNoncePad, time.Now())
 	c.Response().Header().Set("DPoP-Nonce", nonces[0])
 
 	return c.JSON(http.StatusOK, res)
 }
 
-func (o *OATProxy) Token(ctx context.Context, tokenRequest *TokenRequest, dpopHeader string) (*TokenResponse, error) {
-	proof, err := dpop.Parse(dpopHeader, dpop.POST, &url.URL{Host: o.host, Scheme: "https", Path: "/oauth/token"}, dpop.ParseOptions{
-		Nonce:      "",
-		TimeWindow: &dpopTimeWindow,
-	})
-	if err != nil {
-		return nil, echo.NewHTTPError(http.StatusBadRequest, "invalid DPoP proof")
-	}
-
-	jkt := proof.PublicKey()
-	session, err := o.getOAuthSession(jkt)
-	if err != nil {
-		return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("could not get oauth session: %s", err))
-	}
+func (o *OATProxy) Token(ctx context.Context, tokenRequest *TokenRequest, dpopHeader string, session *OAuthSession) (*TokenResponse, error) {
 
 	if tokenRequest.GrantType == "authorization_code" {
 		return o.AccessToken(ctx, tokenRequest, session)

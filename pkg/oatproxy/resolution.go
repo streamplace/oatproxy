@@ -136,6 +136,24 @@ func ResolveService(ctx context.Context, did string) (string, string, error) {
 	return service, handle, nil
 }
 
+// returns did, service
+func ResolveHandleAndService(ctx context.Context, handle string) (string, string, *echo.HTTPError) {
+	did, err := ResolveHandle(ctx, handle)
+	if err != nil {
+		return "", "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to resolve handle '%s': %s", handle, err))
+	}
+
+	var handle2 string
+	service, handle2, err := ResolveService(ctx, did)
+	if err != nil {
+		return "", "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to resolve service for DID '%s': %s", did, err))
+	}
+	if handle2 != handle {
+		return "", "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("handle mismatch: %s != %s", handle2, handle))
+	}
+	return did, service, nil
+}
+
 func HandleComAtprotoIdentityResolveHandle(c echo.Context) error {
 	ctx, span := otel.Tracer("server").Start(c.Request().Context(), "HandleComAtprotoIdentityResolveHandle")
 	defer span.End()

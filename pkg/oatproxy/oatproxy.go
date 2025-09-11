@@ -22,6 +22,7 @@ type OATProxy struct {
 	slog                *slog.Logger
 	clientMetadata      *OAuthClientMetadata
 	defaultPDS          string
+	public              bool
 }
 
 type Config struct {
@@ -38,6 +39,7 @@ type Config struct {
 	Slog           *slog.Logger
 	ClientMetadata *OAuthClientMetadata
 	DefaultPDS     string
+	Public         bool
 }
 
 func New(conf *Config) *OATProxy {
@@ -58,6 +60,7 @@ func New(conf *Config) *OATProxy {
 		slog:                mySlog,
 		clientMetadata:      conf.ClientMetadata,
 		defaultPDS:          conf.DefaultPDS,
+		public:              conf.Public,
 	}
 	if conf.Lock != nil {
 		o.lock = conf.Lock

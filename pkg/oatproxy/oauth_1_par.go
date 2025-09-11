@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/AxisCommunications/go-dpop"
@@ -69,9 +70,29 @@ func (o *OATProxy) NewPAR(ctx context.Context, c echo.Context, par *PAR, dpopHea
 	if err != nil {
 		return nil, echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("failed to load OAuth session: %s", err))
 	}
+	var expectedURL *url.URL
+	var upstreamAuthServerURL string
+	if o.public {
+		_, service, httpErr := ResolveHandleAndService(ctx, par.LoginHint)
+		if httpErr != nil {
+			return nil, httpErr
+		}
+		oclient, err := o.GetOauthClient()
+		if err != nil {
+			return nil, echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("failed to create OAuth client: %s", err))
+		}
+		authserver, err := oclient.ResolvePdsAuthServer(ctx, service)
+		if err != nil {
+			return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to resolve PDS auth server for service '%s': %s", service, err))
+		}
+		upstreamAuthServerURL = authserver
+		expectedURL = &url.URL{Host: strings.TrimPrefix(authserver, "https://"), Scheme: "https", Path: "/oauth/par"}
+	} else {
+		expectedURL = &url.URL{Host: o.host, Scheme: "https", Path: "/oauth/par"}
+	}
 	// special case - if this is the first request, we need to send it back for a new nonce
 	if session == nil {
-		_, err := dpop.Parse(dpopHeader, dpop.POST, &url.URL{Host: o.host, Scheme: "https", Path: "/oauth/par"}, dpop.ParseOptions{
+		_, err := dpop.Parse(dpopHeader, dpop.POST, expectedURL, dpop.ParseOptions{
 			Nonce:      claims.Nonce,
 			TimeWindow: &dpopTimeWindow,
 		})
@@ -95,7 +116,7 @@ func (o *OATProxy) NewPAR(ctx context.Context, c echo.Context, par *PAR, dpopHea
 	if !slices.Contains(nonces, claims.Nonce) {
 		return nil, echo.NewHTTPError(http.StatusBadRequest, "invalid nonce")
 	}
-	proof, err := dpop.Parse(dpopHeader, dpop.POST, &url.URL{Host: o.host, Scheme: "https", Path: "/oauth/par"}, dpop.ParseOptions{
+	proof, err := dpop.Parse(dpopHeader, dpop.POST, expectedURL, dpop.ParseOptions{
 		Nonce:      claims.Nonce,
 		TimeWindow: &dpopTimeWindow,
 	})
@@ -117,7 +138,7 @@ func (o *OATProxy) NewPAR(ctx context.Context, c echo.Context, par *PAR, dpopHea
 	if err != nil {
 		return nil, err
 	}
-	if par.ClientID != clientMetadata.ClientID {
+	if !compareURLs(par.ClientID, clientMetadata.ClientID) {
 		return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("invalid client_id: expected %s, got %s", clientMetadata.ClientID, par.ClientID))
 	}
 
@@ -167,6 +188,7 @@ func (o *OATProxy) NewPAR(ctx context.Context, c echo.Context, par *PAR, dpopHea
 		DownstreamState:         par.State,
 		DownstreamRedirectURI:   realRedirectURI,
 		Handle:                  par.LoginHint,
+		UpstreamAuthServerURL:   upstreamAuthServerURL,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("could not create oauth session: %w", err)

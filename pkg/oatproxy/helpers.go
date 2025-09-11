@@ -5,11 +5,14 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/AxisCommunications/go-dpop"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/labstack/echo/v4"
 )
 
 func boolPtr(b bool) *bool {
@@ -96,4 +99,100 @@ func getJKT(dpopJWT string) (string, *dpop.ProofTokenClaims, error) {
 	b64URLjwkHash := base64.RawURLEncoding.EncodeToString(h.Sum(nil))
 
 	return b64URLjwkHash, &claims, nil
+}
+
+func (o *OATProxy) authServerURL(session *OAuthSession, path string) *url.URL {
+	if o.public {
+		u, err := url.Parse(session.UpstreamAuthServerURL)
+		if err != nil {
+			panic(err)
+		}
+		return &url.URL{Host: u.Host, Scheme: u.Scheme, Path: path}
+	} else {
+		return &url.URL{Host: o.host, Scheme: "https", Path: path}
+	}
+}
+
+func (o *OATProxy) pdsServerURL(session *OAuthSession, path string) *url.URL {
+	if o.public {
+		u, err := url.Parse(session.PDSUrl)
+		if err != nil {
+			panic(err)
+		}
+		return &url.URL{Host: u.Host, Scheme: u.Scheme, Path: path}
+	} else {
+		return &url.URL{Host: o.host, Scheme: "https", Path: path}
+	}
+}
+
+// if you're not expecting a nonce, pass in an empty string
+// but also, if you ARE expecting a nonce, error before you get here if one is not provided
+func (o *OATProxy) validateDPoP(dpopHeader string, method dpop.HTTPVerb, path string) (*OAuthSession, *echo.HTTPError) {
+	jkt, _, err := getJKT(dpopHeader)
+	if err != nil {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to get JKT from DPoP header header=%s: %s", dpopHeader, err))
+	}
+	session, err := o.getOAuthSession(jkt)
+	if err != nil {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("could not get oauth session: %s", err))
+	}
+	if session == nil {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "session not found")
+	}
+	proof, err := dpop.Parse(dpopHeader, method, o.authServerURL(session, path), dpop.ParseOptions{
+		Nonce:      "",
+		TimeWindow: &dpopTimeWindow,
+	})
+	if err != nil {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "invalid DPoP proof: s", err)
+	}
+	if proof.PublicKey() != jkt {
+		return nil, echo.NewHTTPError(http.StatusInternalServerError, "decode/proof JKT mismatch")
+	}
+	return session, nil
+}
+
+func compareURLs(url1, url2 string) bool {
+	u1, err := url.Parse(url1)
+	if err != nil {
+		return false
+	}
+	u2, err := url.Parse(url2)
+	if err != nil {
+		return false
+	}
+
+	// Compare scheme, host, path, and fragment
+	if u1.Scheme != u2.Scheme ||
+		u1.Host != u2.Host ||
+		u1.Path != u2.Path ||
+		u1.Fragment != u2.Fragment {
+		return false
+	}
+
+	// Compare query parameters (order doesn't matter)
+	q1 := u1.Query()
+	q2 := u2.Query()
+
+	if len(q1) != len(q2) {
+		return false
+	}
+
+	for key, values1 := range q1 {
+		values2, exists := q2[key]
+		if !exists {
+			return false
+		}
+		if len(values1) != len(values2) {
+			return false
+		}
+		// Compare values (order matters within each key's values)
+		for i, v := range values1 {
+			if v != values2[i] {
+				return false
+			}
+		}
+	}
+
+	return true
 }
