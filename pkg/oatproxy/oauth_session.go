@@ -28,6 +28,8 @@ type OAuthSession struct {
 	UpstreamAccessTokenExp   *time.Time `json:"upstream_access_token_exp" gorm:"column:upstream_access_token_exp"`
 	UpstreamRefreshToken     string     `json:"upstream_refresh_token" gorm:"column:upstream_refresh_token"`
 	UpstreamAuthServerURL    string     `json:"upstream_auth_server_url" gorm:"column:upstream_auth_server_url"`
+	// This field should be named UpstreamRevokedAt but it keeps its name for backwards compatibility
+	RevokedAt *time.Time `json:"revoked_at" gorm:"column:revoked_at"`
 
 	// Downstream fields
 	DownstreamDPoPNoncePad      string     `json:"downstream_dpop_nonce_pad" gorm:"column:downstream_dpop_nonce_pad"`
@@ -42,13 +44,14 @@ type OAuthSession struct {
 	DownstreamPARUsedAt         *time.Time `json:"downstream_par_used_at" gorm:"column:downstream_par_used_at"`
 	DownstreamRedirectURI       string     `json:"downstream_redirect_uri" gorm:"column:downstream_redirect_uri"`
 	DownstreamJTICache          string     `json:"downstream_jti_cache" gorm:"column:downstream_jti_cache"`
+	// Indicates that the session has been revoked by the downstream user, but upstream still might be valid
+	DownstreamRevokedAt *time.Time `json:"downstream_revoked_at" gorm:"column:downstream_revoked_at"`
 
 	// Deprecated and unused
 	XXDONTUSEDownstreamDPoPNonce string `json:"downstream_dpop_nonce" gorm:"column:downstream_dpop_nonce"`
 
-	RevokedAt *time.Time `json:"revoked_at" gorm:"column:revoked_at"`
-	CreatedAt time.Time  `json:"created_at"`
-	UpdatedAt time.Time  `json:"updated_at"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // for gorm. this is prettier than "o_auth_sessions"
@@ -71,6 +74,8 @@ const (
 	OAuthSessionStateDownstream OAuthSessionStatus = "downstream"
 	// Code has been used, everything is good
 	OAuthSessionStateReady OAuthSessionStatus = "ready"
+	// Downstream is rejected, the user logged out. Upstream is still okay as far as we know.
+	OAuthSessionStateReadyUpstream OAuthSessionStatus = "ready-upstream"
 	// For any reason we're done. Revoked or expired
 	OAuthSessionStateRejected OAuthSessionStatus = "rejected"
 )
@@ -78,6 +83,9 @@ const (
 func (o *OAuthSession) Status() OAuthSessionStatus {
 	if o.RevokedAt != nil {
 		return OAuthSessionStateRejected
+	}
+	if o.DownstreamRevokedAt != nil {
+		return OAuthSessionStateReadyUpstream
 	}
 	if o.DownstreamAccessToken != "" {
 		return OAuthSessionStateReady
@@ -185,7 +193,7 @@ func (o *OATProxy) getOAuthSession(jkt string) (*OAuthSession, error) {
 		// someone else refreshed, that's chill
 		return session, nil
 	}
-	if session.Status() != OAuthSessionStateReady {
+	if session.Status() != OAuthSessionStateReady && session.Status() != OAuthSessionStateReadyUpstream {
 		return session, nil
 	}
 
@@ -209,12 +217,16 @@ func (o *OATProxy) getOAuthSession(jkt string) (*OAuthSession, error) {
 	resp, refreshErr := oclient.RefreshTokenRequest(context.Background(), session.UpstreamRefreshToken, session.UpstreamAuthServerIssuer, session.UpstreamDPoPNonce, dpopKey)
 	if refreshErr != nil {
 		// revoke, probably
-		o.slog.Error("failed to refresh upstream token, revoking downstream session", "error", refreshErr)
+		o.slog.Error("failed to refresh upstream token, revoking session", "error", refreshErr)
 		now := time.Now()
 		session.RevokedAt = &now
+		// technically RevokedAt implies DownstreamRevokedAt but we'll be explicit here
+		if session.DownstreamRevokedAt == nil {
+			session.DownstreamRevokedAt = &now
+		}
 		err = o.updateOAuthSession(session.DownstreamDPoPJKT, session)
 		if err != nil {
-			o.slog.Error("after upstream token refresh, failed to revoke downstream session", "error", err)
+			o.slog.Error("after upstream token refresh, failed to revoke session", "error", err)
 		}
 		return nil, fmt.Errorf("failed to refresh upstream token: %w", refreshErr)
 	}
