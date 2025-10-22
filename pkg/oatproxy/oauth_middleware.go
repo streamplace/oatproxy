@@ -191,6 +191,9 @@ func (o *OATProxy) DPoPNonceMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 		if err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 		}
+		if session == nil {
+			return echo.NewHTTPError(http.StatusUnauthorized, "oauth session not found")
+		}
 
 		validNonces := generateValidNonces(session.DownstreamDPoPNoncePad, time.Now())
 		c.Response().Header().Set("DPoP-Nonce", validNonces[0])
