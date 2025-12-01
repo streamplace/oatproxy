@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -108,18 +109,24 @@ func (o *OATProxy) Authorize(ctx context.Context, requestURI, clientID string) (
 	var service string
 	var did string
 	if session.Handle != "" {
-		did, err = ResolveHandle(ctx, session.Handle)
-		if err != nil {
-			return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to resolve handle '%s': %s", session.DID, err))
-		}
 
-		var handle2 string
-		service, handle2, err = ResolveService(ctx, did)
-		if err != nil {
-			return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to resolve service for DID '%s': %s", did, err))
-		}
-		if handle2 != session.Handle {
-			return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("handle mismatch: %s != %s", handle2, session.Handle))
+		if strings.HasPrefix(session.Handle, "http://") || strings.HasPrefix(session.Handle, "https://") {
+			// we'll properly populate this after signup completes
+			service = session.Handle
+		} else {
+			did, err = ResolveHandle(ctx, session.Handle)
+			if err != nil {
+				return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to resolve handle '%s': %s", session.Handle, err))
+			}
+
+			var handle2 string
+			service, handle2, err = ResolveService(ctx, did)
+			if err != nil {
+				return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to resolve service for DID '%s': %s", did, err))
+			}
+			if handle2 != session.Handle {
+				return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("handle mismatch: %s != %s", handle2, session.Handle))
+			}
 		}
 	} else {
 		service = o.defaultPDS
@@ -144,7 +151,13 @@ func (o *OATProxy) Authorize(ctx context.Context, requestURI, clientID string) (
 	opts := oauth.ParAuthRequestOpts{
 		State: state,
 	}
-	parResp, err := oclient.SendParAuthRequest(ctx, authserver, authmeta, session.Handle, upstreamMeta.Scope, k, opts)
+
+	loginHint := session.Handle
+	if strings.HasPrefix(session.Handle, "http://") || strings.HasPrefix(session.Handle, "https://") {
+		loginHint = ""
+	}
+
+	parResp, err := oclient.SendParAuthRequest(ctx, authserver, authmeta, loginHint, upstreamMeta.Scope, k, opts)
 	if err != nil {
 		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to send PAR auth request to '%s': %s", authserver, err))
 	}
