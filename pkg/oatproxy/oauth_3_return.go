@@ -133,6 +133,9 @@ func (o *OATProxy) Return(ctx context.Context, code string, iss string, state st
 		if err != nil && !errors.Is(err, jwt.ErrTokenUnverifiable) {
 			return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to parse access token: %s", err))
 		}
+		if len(claims.Audience) == 0 {
+			return "", echo.NewHTTPError(http.StatusBadRequest, "access token has no audience claim")
+		}
 		if !strings.HasPrefix(claims.Audience[0], "did:web:") {
 			return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("invalid audience: %s", claims.Audience[0]))
 		}
