@@ -60,11 +60,7 @@ func (o *OATProxy) HandleOAuthReturn(c echo.Context) error {
 
 func (o *OATProxy) Return(ctx context.Context, code string, iss string, state string) (string, *echo.HTTPError) {
 	upstreamMeta := o.GetUpstreamMetadata()
-	oclient, err := oauth.NewClient(oauth.ClientArgs{
-		ClientJwk:   o.upstreamJWK,
-		ClientId:    upstreamMeta.ClientID,
-		RedirectUri: upstreamMeta.RedirectURIs[0],
-	})
+	oclient, err := o.GetOauthClient()
 
 	jkt, _, err := parseState(state)
 	if err != nil {
@@ -160,6 +156,11 @@ func (o *OATProxy) Return(ctx context.Context, code string, iss string, state st
 		o.slog.Error("failed to check account status", "error", err, "pdsUrl", session.PDSUrl, "issuer", session.UpstreamAuthServerIssuer, "accessToken", session.UpstreamAccessToken)
 		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to check account status: %s", err))
 	}
+	authserver, err := oclient.ResolvePdsAuthServer(ctx, session.PDSUrl)
+	if err != nil {
+		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to resolve PDS auth server for service '%s': %s", session.PDSUrl, err))
+	}
+	session.UpstreamAuthServerURL = authserver
 
 	err = o.updateOAuthSession(session.DownstreamDPoPJKT, session)
 	if err != nil {
@@ -171,7 +172,11 @@ func (o *OATProxy) Return(ctx context.Context, code string, iss string, state st
 		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to parse downstream redirect URI: %s", err))
 	}
 	q := u.Query()
-	q.Set("iss", fmt.Sprintf("https://%s", o.host))
+	if !o.public {
+		q.Set("iss", fmt.Sprintf("https://%s", o.host))
+	} else {
+		q.Set("iss", authserver)
+	}
 	q.Set("state", session.DownstreamState)
 	q.Set("code", session.DownstreamAuthorizationCode)
 	u.RawQuery = q.Encode()

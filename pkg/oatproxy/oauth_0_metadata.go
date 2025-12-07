@@ -54,9 +54,20 @@ func (o *OATProxy) HandleClientMetadataDownstream(c echo.Context) error {
 	return c.JSON(200, meta)
 }
 
+func (o *OATProxy) publicClientID(redirectURI string) *url.URL {
+	u := url.URL{
+		Host:   "localhost",
+		Scheme: "http",
+	}
+	q := u.Query()
+	q.Set("scope", o.scope)
+	q.Set("redirect_uri", redirectURI)
+	u.RawQuery = q.Encode()
+	return &u
+}
+
 func (o *OATProxy) GetUpstreamMetadata() *OAuthClientMetadata {
 	meta := *o.clientMetadata
-	meta.ClientID = fmt.Sprintf("https://%s/oauth/upstream/client-metadata.json", o.host)
 	meta.JwksURI = fmt.Sprintf("https://%s/oauth/upstream/jwks.json", o.host)
 	meta.ClientURI = fmt.Sprintf("https://%s", o.host)
 	meta.TokenEndpointAuthMethod = "private_key_jwt"
@@ -64,7 +75,19 @@ func (o *OATProxy) GetUpstreamMetadata() *OAuthClientMetadata {
 	meta.GrantTypes = []string{"authorization_code", "refresh_token"}
 	meta.DPoPBoundAccessTokens = boolPtr(true)
 	meta.TokenEndpointAuthSigningAlg = "ES256"
-	meta.RedirectURIs = []string{fmt.Sprintf("https://%s/oauth/return", o.host)}
+	if !o.public {
+		meta.RedirectURIs = []string{fmt.Sprintf("https://%s/oauth/return", o.host)}
+		meta.ClientID = fmt.Sprintf("https://%s/oauth/upstream/client-metadata.json", o.host)
+	} else {
+		u, err := url.Parse(meta.RedirectURIs[0])
+		if err != nil {
+			panic(err)
+		}
+		u.Path = "/oauth/return"
+		clientIDURL := o.publicClientID(u.String())
+		meta.ClientID = clientIDURL.String()
+		meta.RedirectURIs = []string{u.String()}
+	}
 	return &meta
 }
 
@@ -112,7 +135,12 @@ func generateOAuthServerMetadata(host string) map[string]any {
 
 func (o *OATProxy) GetDownstreamMetadata(redirectURI string) (*OAuthClientMetadata, error) {
 	meta := *o.clientMetadata
-	meta.ClientID = fmt.Sprintf("https://%s/oauth/downstream/client-metadata.json", o.host)
+	if !o.public {
+		meta.ClientID = fmt.Sprintf("https://%s/oauth/downstream/client-metadata.json", o.host)
+	} else {
+		u := o.publicClientID(redirectURI)
+		meta.ClientID = u.String()
+	}
 	meta.ClientURI = fmt.Sprintf("https://%s", o.host)
 	meta.TokenEndpointAuthMethod = "none"
 	meta.ResponseTypes = []string{"code"}
@@ -127,7 +155,7 @@ func (o *OATProxy) GetDownstreamMetadata(redirectURI string) (*OAuthClientMetada
 				break
 			}
 		}
-		if !found {
+		if !found && !o.public {
 			return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("invalid redirect_uri: %s not in allowed URIs", redirectURI))
 		}
 		meta.RedirectURIs = []string{redirectURI}

@@ -106,6 +106,92 @@ export default async function createOAuthClient(
 }
 ```
 
+If you want to be able to use PDS URLs (this includes the oauth signup flow), add this code as well:
+
+```typescript
+import type { OAuthAuthorizationServerMetadata } from "@atproto/oauth-client";
+import {
+  OAuthResolver,
+  ResolveOAuthOptions,
+} from "@atproto/oauth-client/dist/oauth-resolver";
+
+export type StreamplaceOAuthClient = Omit<
+  ReactNativeOAuthClient,
+  "keyset" | "serverFactory" | "jwks"
+>;
+
+// A custom OAuth resolver that always fetches metadata from our backend
+// but remembers the resource server URL for use in login_hint
+class StreamplaceOAuthResolver extends OAuthResolver {
+  private currentResourceServer: string | null = null;
+
+  constructor(
+    private streamplaceUrl: string,
+    ...args: ConstructorParameters<typeof OAuthResolver>
+  ) {
+    super(...args);
+  }
+
+  async resolveFromService(
+    input: string,
+    options?: ResolveOAuthOptions,
+  ): Promise<{
+    metadata: OAuthAuthorizationServerMetadata;
+  }> {
+    // Input is the resource server URL (e.g., https://selfhosted.social)
+    // Store it for use in login_hint
+    this.currentResourceServer = input;
+
+    // Always fetch metadata from our backend
+    // The issuer will be our backend, not the resource server
+    const metadata = await this.getResourceServerMetadata(
+      this.streamplaceUrl,
+      options,
+    );
+
+    return { metadata };
+  }
+
+  getCurrentResourceServer(): string | null {
+    return this.currentResourceServer;
+  }
+}
+
+// In your createOAuthClient function, before creating the client:
+let customResolver: StreamplaceOAuthResolver | null = null;
+
+// In your fetch handler, add this before the existing logic:
+// Add login_hint parameter to PAR requests
+if (
+  customResolver &&
+  request.url.includes("/oauth/par") &&
+  request.method === "POST"
+) {
+  const resourceServer = customResolver.getCurrentResourceServer();
+  if (resourceServer) {
+    const clonedRequest = request.clone();
+    const body = await clonedRequest.text();
+    const params = new URLSearchParams(body);
+    params.set("login_hint", resourceServer);
+    request = new Request(request.url, {
+      method: request.method,
+      headers: request.headers,
+      body: params.toString(),
+    });
+  }
+}
+
+// After creating the client, replace the default OAuth resolver:
+customResolver = new StreamplaceOAuthResolver(
+  oatProxyUrl,
+  client.oauthResolver.identityResolver,
+  client.oauthResolver.protectedResourceMetadataResolver,
+  client.oauthResolver.authorizationServerMetadataResolver,
+);
+// @ts-ignore override readonly property
+client.oauthResolver = customResolver;
+```
+
 # Partial List of Endpoints
 
 These can be useful for debugging purposes:

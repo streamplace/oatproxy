@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"time"
 
 	"github.com/AxisCommunications/go-dpop"
@@ -32,22 +31,25 @@ func (o *OATProxy) HandleOAuthRevoke(c echo.Context) error {
 }
 
 func (o *OATProxy) Revoke(ctx context.Context, dpopHeader string, revokeRequest *RevokeRequest) error {
-	proof, err := dpop.Parse(dpopHeader, dpop.POST, &url.URL{Host: o.host, Scheme: "https", Path: "/oauth/revoke"}, dpop.ParseOptions{
+	jkt, _, err := getJKT(dpopHeader)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to get JKT from DPoP header header=%s: %s", dpopHeader, err))
+	}
+	session, err := o.getOAuthSession(jkt)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("could not get oauth session: %s", err))
+	}
+	_, httpErr := dpop.Parse(dpopHeader, dpop.POST, o.authServerURL(session, "/oauth/revoke"), dpop.ParseOptions{
 		Nonce:      "",
 		TimeWindow: &dpopTimeWindow,
 	})
-	if err != nil {
+	if httpErr != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid DPoP proof")
-	}
-
-	session, err := o.getOAuthSession(proof.PublicKey())
-	if err != nil {
-		return fmt.Errorf("could not get downstream session: %w", err)
 	}
 
 	now := time.Now()
 	slog.Info("revoking session by user request", "session", session.DownstreamDPoPJKT, "did", session.DID)
-	session.RevokedAt = &now
+	session.DownstreamRevokedAt = &now
 	err = o.updateOAuthSession(session.DownstreamDPoPJKT, session)
 	if err != nil {
 		return fmt.Errorf("could not update downstream session: %w", err)
