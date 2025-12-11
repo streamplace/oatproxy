@@ -61,7 +61,7 @@ func ResolveHandle(ctx context.Context, handle string) (string, error) {
 			return "", err
 		}
 
-		maybeDid := string(b)
+		maybeDid := strings.TrimSpace(string(b))
 
 		if _, err := syntax.ParseDID(maybeDid); err != nil {
 			return "", fmt.Errorf("unable to resolve handle")
