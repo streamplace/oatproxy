@@ -59,7 +59,6 @@ func (o *OATProxy) HandleOAuthReturn(c echo.Context) error {
 }
 
 func (o *OATProxy) Return(ctx context.Context, code string, iss string, state string) (string, *echo.HTTPError) {
-	upstreamMeta := o.GetUpstreamMetadata()
 	oclient, err := o.GetOauthClient()
 
 	jkt, _, err := parseState(state)
@@ -100,10 +99,6 @@ func (o *OATProxy) Return(ctx context.Context, code string, iss string, state st
 
 	if session.DID != "" && itResp.Sub != session.DID {
 		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("sub mismatch: %s != %s", itResp.Sub, session.DID))
-	}
-
-	if itResp.Scope != upstreamMeta.Scope {
-		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("scope mismatch: %s != %s", itResp.Scope, upstreamMeta.Scope))
 	}
 
 	downstreamCode, err := generateAuthorizationCode()
