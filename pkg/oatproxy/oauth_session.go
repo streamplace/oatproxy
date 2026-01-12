@@ -28,6 +28,7 @@ type OAuthSession struct {
 	UpstreamAccessTokenExp   *time.Time `json:"upstream_access_token_exp" gorm:"column:upstream_access_token_exp"`
 	UpstreamRefreshToken     string     `json:"upstream_refresh_token" gorm:"column:upstream_refresh_token"`
 	UpstreamAuthServerURL    string     `json:"upstream_auth_server_url" gorm:"column:upstream_auth_server_url"`
+	UpstreamScope            string     `json:"upstream_scope" gorm:"column:upstream_scope"`
 	// This field should be named UpstreamRevokedAt but it keeps its name for backwards compatibility
 	RevokedAt *time.Time `json:"revoked_at" gorm:"column:revoked_at"`
 

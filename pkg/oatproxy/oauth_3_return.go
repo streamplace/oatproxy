@@ -111,6 +111,7 @@ func (o *OATProxy) Return(ctx context.Context, code string, iss string, state st
 	session.UpstreamAccessTokenExp = &expiry
 	session.UpstreamRefreshToken = itResp.RefreshToken
 	session.DownstreamAuthorizationCode = downstreamCode
+	session.UpstreamScope = itResp.Scope
 	if session.DID == "" {
 		_, handle, err := ResolveService(ctx, itResp.Sub)
 		if err != nil {
