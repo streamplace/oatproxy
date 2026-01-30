@@ -23,6 +23,7 @@ type OATProxy struct {
 	clientMetadata      *OAuthClientMetadata
 	defaultPDS          string
 	public              bool
+	httpClient          *http.Client
 }
 
 type Config struct {
@@ -40,6 +41,7 @@ type Config struct {
 	ClientMetadata *OAuthClientMetadata
 	DefaultPDS     string
 	Public         bool
+	HTTPClient     *http.Client
 }
 
 func New(conf *Config) *OATProxy {
@@ -62,6 +64,11 @@ func New(conf *Config) *OATProxy {
 		defaultPDS:          conf.DefaultPDS,
 		public:              conf.Public,
 	}
+	if conf.HTTPClient != nil {
+		o.httpClient = conf.HTTPClient
+	} else {
+		o.httpClient = http.DefaultClient
+	}
 	if conf.Lock != nil {
 		o.lock = conf.Lock
 	} else {
@@ -77,7 +84,7 @@ func New(conf *Config) *OATProxy {
 
 	o.Echo.GET("/.well-known/oauth-authorization-server", o.HandleOAuthAuthorizationServer)
 	o.Echo.GET("/.well-known/oauth-protected-resource", o.HandleOAuthProtectedResource)
-	o.Echo.GET("/xrpc/com.atproto.identity.resolveHandle", HandleComAtprotoIdentityResolveHandle)
+	o.Echo.GET("/xrpc/com.atproto.identity.resolveHandle", o.HandleComAtprotoIdentityResolveHandle)
 	o.Echo.POST("/oauth/par", o.HandleOAuthPAR)
 	o.Echo.GET("/oauth/authorize", o.HandleOAuthAuthorize)
 	o.Echo.GET("/oauth/return", o.HandleOAuthReturn)
