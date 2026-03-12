@@ -21,16 +21,21 @@ type XrpcClient struct {
 	o                *OATProxy
 }
 
+func rateLimitCacheKey(session *OAuthSession) string {
+	return fmt.Sprintf("%s:%s", session.DID, session.PDSUrl)
+}
+
 func (o *OATProxy) GetXrpcClient(session *OAuthSession) (*XrpcClient, error) {
+	cacheKey := rateLimitCacheKey(session)
+	o.clientMutex.Lock()
+	defer o.clientMutex.Unlock()
+	client, ok := o.clients[cacheKey]
+	if ok {
+		return client, nil
+	}
 	key, err := jwk.ParseKey([]byte(session.UpstreamDPoPPrivateJWK))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse DPoP private JWK: %w", err)
-	}
-	o.clientMutex.Lock()
-	defer o.clientMutex.Unlock()
-	client, ok := o.clients[session.DID]
-	if ok {
-		return client, nil
 	}
 	authArgs := &oauth.XrpcAuthedRequestArgs{
 		Did:            session.DID,
@@ -56,8 +61,8 @@ func (o *OATProxy) GetXrpcClient(session *OAuthSession) (*XrpcClient, error) {
 			o.slog.Info("updated OAuth session in OnDpopPdsNonceChanged", "session", sess)
 		},
 	}
-	o.clients[session.DID] = &XrpcClient{client: xrpcClient, authArgs: authArgs}
-	return &XrpcClient{client: xrpcClient, authArgs: authArgs, o: o}, nil
+	o.clients[cacheKey] = &XrpcClient{client: xrpcClient, authArgs: authArgs, o: o}
+	return o.clients[cacheKey], nil
 }
 
 func (c *XrpcClient) Do(ctx context.Context, kind string, inpenc, method string, params map[string]any, bodyobj any, out any) error {
