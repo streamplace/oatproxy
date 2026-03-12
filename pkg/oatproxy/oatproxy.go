@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"sync"
 
 	"github.com/labstack/echo/v4"
 	"github.com/lestrrat-go/jwx/v2/jwk"
@@ -24,6 +25,8 @@ type OATProxy struct {
 	defaultPDS          string
 	public              bool
 	httpClient          *http.Client
+	clients             map[string]*XrpcClient
+	clientMutex         sync.Mutex
 }
 
 type Config struct {
@@ -63,6 +66,7 @@ func New(conf *Config) *OATProxy {
 		clientMetadata:      conf.ClientMetadata,
 		defaultPDS:          conf.DefaultPDS,
 		public:              conf.Public,
+		clients:             make(map[string]*XrpcClient),
 	}
 	if conf.HTTPClient != nil {
 		o.httpClient = conf.HTTPClient
