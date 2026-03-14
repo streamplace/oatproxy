@@ -182,7 +182,7 @@ func (o *OATProxy) DPoPNonceMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 			return echo.NewHTTPError(http.StatusBadRequest, "missing DPoP header")
 		}
 
-		jkt, _, err := getJKT(dpopHeader)
+		jkt, dpopClaims, err := getJKT(dpopHeader)
 		if err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 		}
@@ -196,20 +196,15 @@ func (o *OATProxy) DPoPNonceMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 		}
 
 		validNonces := generateValidNonces(session.DownstreamDPoPNoncePad, time.Now())
-		c.Response().Header().Set("DPoP-Nonce", validNonces[0])
-
-		dpopNonce := c.Response().Header().Get("DPoP-Nonce")
-		if dpopNonce == "" {
-			return echo.NewHTTPError(http.StatusUnauthorized, "DPoP-Nonce header is required")
-		}
-
-		if !slices.Contains(validNonces, dpopNonce) {
+		if !slices.Contains(validNonces, dpopClaims.Nonce) {
 			c.Response().Header().Set("WWW-Authenticate", `DPoP algs="RS256 RS384 RS512 PS256 PS384 PS512 ES256 ES256K ES384 ES512", error="use_dpop_nonce", error_description="Authorization server requires nonce in DPoP proof"`)
+			c.Response().Header().Set("DPoP-Nonce", validNonces[0])
 			return c.JSON(http.StatusUnauthorized, map[string]interface{}{
 				"error":             "use_dpop_nonce",
 				"error_description": "Authorization server requires nonce in DPoP proof",
 			})
 		}
+		c.Response().Header().Set("DPoP-Nonce", validNonces[0])
 
 		c.Set("session", session)
 		return next(c)

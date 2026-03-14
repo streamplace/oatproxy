@@ -70,7 +70,6 @@ func (o *OATProxy) HandleOAuthToken(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("expected URL", o.authServerURL(session, "/oauth/token"))
 	_, err = dpop.Parse(dpopHeader, dpop.POST, o.authServerURL(session, "/oauth/token"), dpop.ParseOptions{
 		Nonce:      "",
 		TimeWindow: &dpopTimeWindow,

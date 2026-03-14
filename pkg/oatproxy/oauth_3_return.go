@@ -60,6 +60,9 @@ func (o *OATProxy) HandleOAuthReturn(c echo.Context) error {
 
 func (o *OATProxy) Return(ctx context.Context, code string, iss string, state string) (string, *echo.HTTPError) {
 	oclient, err := o.GetOauthClient()
+	if err != nil {
+		return "", echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("failed to get OAuth client: %s", err))
+	}
 
 	jkt, _, err := parseState(state)
 	if err != nil {
@@ -149,7 +152,7 @@ func (o *OATProxy) Return(ctx context.Context, code string, iss string, state st
 	// brief check to make sure we can actually do stuff
 	var out atproto.ServerCheckAccountStatus_Output
 	if err := xrpcClient.Do(ctx, authArgs, xrpc.Query, "application/json", "com.atproto.server.checkAccountStatus", nil, nil, &out); err != nil {
-		o.slog.Error("failed to check account status", "error", err, "pdsUrl", session.PDSUrl, "issuer", session.UpstreamAuthServerIssuer, "accessToken", session.UpstreamAccessToken)
+		o.slog.Error("failed to check account status", "error", err, "pdsUrl", session.PDSUrl, "issuer", session.UpstreamAuthServerIssuer)
 		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to check account status: %s", err))
 	}
 	authserver, err := oclient.ResolvePdsAuthServer(ctx, session.PDSUrl)
