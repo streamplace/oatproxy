@@ -12,13 +12,11 @@ import (
 	oauth "github.com/streamplace/atproto-oauth-golang"
 )
 
-var xrpcClient *oauth.XrpcClient
-
 type XrpcClient struct {
-	client           *oauth.XrpcClient
-	authArgs         *oauth.XrpcAuthedRequestArgs
-	rateLimitedUntil time.Time
-	o                *OATProxy
+	client   *oauth.XrpcClient
+	authArgs *oauth.XrpcAuthedRequestArgs
+	o        *OATProxy
+	cacheKey string
 }
 
 func rateLimitCacheKey(session *OAuthSession) string {
@@ -27,12 +25,6 @@ func rateLimitCacheKey(session *OAuthSession) string {
 
 func (o *OATProxy) GetXrpcClient(session *OAuthSession) (*XrpcClient, error) {
 	cacheKey := rateLimitCacheKey(session)
-	o.clientMutex.Lock()
-	defer o.clientMutex.Unlock()
-	client, ok := o.clients[cacheKey]
-	if ok {
-		return client, nil
-	}
 	key, err := jwk.ParseKey([]byte(session.UpstreamDPoPPrivateJWK))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse DPoP private JWK: %w", err)
@@ -61,13 +53,24 @@ func (o *OATProxy) GetXrpcClient(session *OAuthSession) (*XrpcClient, error) {
 			o.slog.Info("updated OAuth session in OnDpopPdsNonceChanged", "session", sess)
 		},
 	}
-	o.clients[cacheKey] = &XrpcClient{client: xrpcClient, authArgs: authArgs, o: o}
-	return o.clients[cacheKey], nil
+	client := &XrpcClient{
+		client:   xrpcClient,
+		authArgs: authArgs,
+		o:        o,
+		cacheKey: cacheKey,
+	}
+	return client, nil
 }
 
 func (c *XrpcClient) Do(ctx context.Context, kind string, inpenc, method string, params map[string]any, bodyobj any, out any) error {
-	if c.rateLimitedUntil.After(time.Now()) {
-		return echo.NewHTTPError(http.StatusTooManyRequests, fmt.Sprintf("request not attempted, rate-limited by upstream (will reset at %s)", c.rateLimitedUntil.Format(time.RFC3339)))
+	rateLimitedAny, ok := c.o.rateLimitCache.Get(c.cacheKey)
+	if ok {
+		rateLimited, ok := rateLimitedAny.(*time.Time)
+		if ok {
+			if rateLimited.After(time.Now()) {
+				return echo.NewHTTPError(http.StatusTooManyRequests, fmt.Sprintf("request not attempted, rate-limited by upstream (will reset at %s)", rateLimited.Format(time.RFC3339)))
+			}
+		}
 	}
 	err := c.client.Do(ctx, c.authArgs, kind, inpenc, method, params, bodyobj, out)
 	if err == nil {
@@ -82,8 +85,8 @@ func (c *XrpcClient) Do(ctx context.Context, kind string, inpenc, method string,
 			c.o.slog.Warn("rate-limited by upstream, but ratelimit header not found")
 			return echo.NewHTTPError(http.StatusTooManyRequests, "rate-limited by upstream, but ratelimit header not found")
 		}
-		c.rateLimitedUntil = xErr.Ratelimit.Reset
-		return echo.NewHTTPError(http.StatusTooManyRequests, fmt.Sprintf("http 429 from upstream (will reset at %s)", c.rateLimitedUntil.Format(time.RFC3339)))
+		c.o.rateLimitCache.Set(c.cacheKey, &xErr.Ratelimit.Reset, time.Until(xErr.Ratelimit.Reset))
+		return echo.NewHTTPError(http.StatusTooManyRequests, fmt.Sprintf("http 429 from upstream (will reset at %s)", xErr.Ratelimit.Reset.Format(time.RFC3339)))
 	}
 	return xErr
 }

@@ -4,10 +4,11 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"sync"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/patrickmn/go-cache"
 )
 
 type OATProxy struct {
@@ -25,8 +26,7 @@ type OATProxy struct {
 	defaultPDS          string
 	public              bool
 	httpClient          *http.Client
-	clients             map[string]*XrpcClient
-	clientMutex         sync.Mutex
+	rateLimitCache      *cache.Cache
 }
 
 type Config struct {
@@ -66,7 +66,7 @@ func New(conf *Config) *OATProxy {
 		clientMetadata:      conf.ClientMetadata,
 		defaultPDS:          conf.DefaultPDS,
 		public:              conf.Public,
-		clients:             make(map[string]*XrpcClient),
+		rateLimitCache:      cache.New(-1, 10*time.Minute),
 	}
 	if conf.HTTPClient != nil {
 		o.httpClient = conf.HTTPClient

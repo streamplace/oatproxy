@@ -13,6 +13,7 @@ require (
 	github.com/lestrrat-go/jwx/v2 v2.1.6
 	github.com/lmittmann/tint v1.1.0
 	github.com/orandin/slog-gorm v1.4.0
+	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/peterbourgon/ff/v3 v3.4.0
 	github.com/streamplace/atproto-oauth-golang v0.0.0-20250619231223-a9c04fb888ac
 	github.com/stretchr/testify v1.10.0
