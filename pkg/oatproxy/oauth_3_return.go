@@ -109,6 +109,7 @@ func (o *OATProxy) Return(ctx context.Context, code string, iss string, state st
 	expiry := now.Add(time.Second * time.Duration(itResp.ExpiresIn)).UTC()
 	session.UpstreamAccessToken = itResp.AccessToken
 	session.UpstreamAccessTokenExp = &expiry
+	session.UpstreamAccessTokenLifetime = itResp.ExpiresIn
 	session.UpstreamRefreshToken = itResp.RefreshToken
 	session.DownstreamAuthorizationCode = downstreamCode
 	session.UpstreamScope = itResp.Scope

@@ -10,7 +10,7 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwk"
 )
 
-var refreshWhenRemaining = time.Minute * 15
+var refreshWhenRemainingMax = time.Minute * 15
 
 // OAuthSession stores authentication data needed during the OAuth flow
 type OAuthSession struct {
@@ -19,16 +19,17 @@ type OAuthSession struct {
 	PDSUrl string `json:"pds_url" gorm:"column:pds_url;index"`
 
 	// Upstream fields
-	UpstreamState            string     `json:"upstream_state" gorm:"column:upstream_state;index"`
-	UpstreamAuthServerIssuer string     `json:"upstream_auth_server_issuer" gorm:"column:upstream_auth_server_issuer"`
-	UpstreamPKCEVerifier     string     `json:"upstream_pkce_verifier" gorm:"column:upstream_pkce_verifier"`
-	UpstreamDPoPNonce        string     `json:"upstream_dpop_nonce" gorm:"column:upstream_dpop_nonce"`
-	UpstreamDPoPPrivateJWK   string     `json:"upstream_dpop_private_jwk" gorm:"column:upstream_dpop_private_jwk;type:text"`
-	UpstreamAccessToken      string     `json:"upstream_access_token" gorm:"column:upstream_access_token"`
-	UpstreamAccessTokenExp   *time.Time `json:"upstream_access_token_exp" gorm:"column:upstream_access_token_exp"`
-	UpstreamRefreshToken     string     `json:"upstream_refresh_token" gorm:"column:upstream_refresh_token"`
-	UpstreamAuthServerURL    string     `json:"upstream_auth_server_url" gorm:"column:upstream_auth_server_url"`
-	UpstreamScope            string     `json:"upstream_scope" gorm:"column:upstream_scope"`
+	UpstreamState               string     `json:"upstream_state" gorm:"column:upstream_state;index"`
+	UpstreamAuthServerIssuer    string     `json:"upstream_auth_server_issuer" gorm:"column:upstream_auth_server_issuer"`
+	UpstreamPKCEVerifier        string     `json:"upstream_pkce_verifier" gorm:"column:upstream_pkce_verifier"`
+	UpstreamDPoPNonce           string     `json:"upstream_dpop_nonce" gorm:"column:upstream_dpop_nonce"`
+	UpstreamDPoPPrivateJWK      string     `json:"upstream_dpop_private_jwk" gorm:"column:upstream_dpop_private_jwk;type:text"`
+	UpstreamAccessToken         string     `json:"upstream_access_token" gorm:"column:upstream_access_token"`
+	UpstreamAccessTokenExp      *time.Time `json:"upstream_access_token_exp" gorm:"column:upstream_access_token_exp"`
+	UpstreamAccessTokenLifetime int        `json:"upstream_access_token_lifetime" gorm:"column:upstream_access_token_lifetime"`
+	UpstreamRefreshToken        string     `json:"upstream_refresh_token" gorm:"column:upstream_refresh_token"`
+	UpstreamAuthServerURL       string     `json:"upstream_auth_server_url" gorm:"column:upstream_auth_server_url"`
+	UpstreamScope               string     `json:"upstream_scope" gorm:"column:upstream_scope"`
 	// This field should be named UpstreamRevokedAt but it keeps its name for backwards compatibility
 	RevokedAt *time.Time `json:"revoked_at" gorm:"column:revoked_at"`
 
@@ -167,6 +168,10 @@ func (o *OATProxy) getOAuthSession(jkt string) (*OAuthSession, error) {
 		return session, nil
 	}
 
+	// Refresh when <15% of the lifetime is remaining, but no more than 15 minutes before expiry
+	// If the lifetime is very short, refresh when 30 seconds are remaining
+	refreshWhenRemaining := max(min(time.Duration(float32(session.UpstreamAccessTokenLifetime)*0.15*float32(time.Second)), refreshWhenRemainingMax), time.Second*30)
+
 	timeUntilExpiry := time.Until(*session.UpstreamAccessTokenExp)
 	// Add some randomization to prevent multiple nodes from refreshing at the same time
 	jitter := time.Duration(rand.Int63n(int64(refreshWhenRemaining / 4)))
@@ -235,6 +240,7 @@ func (o *OATProxy) getOAuthSession(jkt string) (*OAuthSession, error) {
 	exp := time.Now().Add(time.Second * time.Duration(resp.ExpiresIn)).UTC()
 	session.UpstreamAccessToken = resp.AccessToken
 	session.UpstreamAccessTokenExp = &exp
+	session.UpstreamAccessTokenLifetime = resp.ExpiresIn
 	session.UpstreamRefreshToken = resp.RefreshToken
 
 	err = o.updateOAuthSession(session.DownstreamDPoPJKT, session)
