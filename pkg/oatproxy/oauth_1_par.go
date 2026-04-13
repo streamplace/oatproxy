@@ -73,7 +73,7 @@ func (o *OATProxy) NewPAR(ctx context.Context, c echo.Context, par *PAR, dpopHea
 	var expectedURL *url.URL
 	var upstreamAuthServerURL string
 	if o.public {
-		_, service, httpErr := ResolveHandleAndService(ctx, par.LoginHint)
+		_, service, httpErr := ResolveHandleAndServiceWithClient(ctx, par.LoginHint, o.httpClient)
 		if httpErr != nil {
 			return nil, httpErr
 		}

@@ -111,17 +111,17 @@ func (o *OATProxy) Authorize(ctx context.Context, requestURI, clientID string) (
 			service = session.Handle
 		} else {
 			var httpErr *echo.HTTPError
-			did, service, httpErr = ResolveHandleAndService(ctx, session.Handle)
+			did, service, httpErr = ResolveHandleAndServiceWithClient(ctx, session.Handle, o.httpClient)
 			if httpErr != nil {
 				return "", httpErr
 			}
-			did, err = ResolveHandle(ctx, session.Handle)
+			did, err = ResolveHandleWithClient(ctx, session.Handle, o.httpClient)
 			if err != nil {
 				return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to resolve handle '%s': %s", session.Handle, err))
 			}
 
 			var handle2 string
-			service, handle2, err = ResolveService(ctx, did)
+			service, handle2, err = ResolveServiceWithClient(ctx, did, o.httpClient)
 			if err != nil {
 				return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to resolve service for DID '%s': %s", did, err))
 			}

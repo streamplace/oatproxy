@@ -113,7 +113,7 @@ func (o *OATProxy) Return(ctx context.Context, code string, iss string, state st
 	session.DownstreamAuthorizationCode = downstreamCode
 	session.UpstreamScope = itResp.Scope
 	if session.DID == "" {
-		_, handle, err := ResolveService(ctx, itResp.Sub)
+		_, handle, err := ResolveServiceWithClient(ctx, itResp.Sub, o.httpClient)
 		if err != nil {
 			return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to resolve service for DID '%s': %s", itResp.Sub, err))
 		}

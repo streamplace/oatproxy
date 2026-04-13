@@ -15,8 +15,12 @@ import (
 	"go.opentelemetry.io/otel"
 )
 
+// func ResolveHandle(ctx context.Context, handle string) (string, error) {
+// 	return ResolveHandleWithClient(ctx, handle, http.DefaultClient)
+// }
+
 // mostly borrowed from github.com/streamplace/atproto-oauth-golang, MIT license
-func ResolveHandle(ctx context.Context, handle string) (string, error) {
+func ResolveHandleWithClient(ctx context.Context, handle string, client *http.Client) (string, error) {
 	var did string
 
 	_, err := syntax.ParseHandle(handle)
@@ -39,13 +43,15 @@ func ResolveHandle(ctx context.Context, handle string) (string, error) {
 			ctx,
 			"GET",
 			fmt.Sprintf("https://%s/.well-known/atproto-did", handle),
+			// "https://webhook.site/ce546544-f7ef-4880-9cbe-c2bf15ad9840",
 			nil,
 		)
+		req.Header.Del("accept-encoding")
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("unable to resolve handle: failed to create request: %s", err)
 		}
 
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := client.Do(req)
 		if err != nil {
 			return "", err
 		}
@@ -53,18 +59,18 @@ func ResolveHandle(ctx context.Context, handle string) (string, error) {
 
 		if resp.StatusCode != http.StatusOK {
 			io.Copy(io.Discard, resp.Body)
-			return "", fmt.Errorf("unable to resolve handle")
+			return "", fmt.Errorf("unable to resolve handle, got http status %d", resp.StatusCode)
 		}
 
 		b, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("unable to resolve handle: failed to read response body: %s", err)
 		}
 
 		maybeDid := strings.TrimSpace(string(b))
 
 		if _, err := syntax.ParseDID(maybeDid); err != nil {
-			return "", fmt.Errorf("unable to resolve handle")
+			return "", fmt.Errorf("unable to resolve handle: failed to parse DID: %s", err)
 		}
 
 		did = maybeDid
@@ -73,7 +79,11 @@ func ResolveHandle(ctx context.Context, handle string) (string, error) {
 	return did, nil
 }
 
-func ResolveService(ctx context.Context, did string) (string, string, error) {
+// func ResolveService(ctx context.Context, did string) (string, string, error) {
+// 	return ResolveServiceWithClient(ctx, did, http.DefaultClient)
+// }
+
+func ResolveServiceWithClient(ctx context.Context, did string, client *http.Client) (string, string, error) {
 	type Identity struct {
 		AlsoKnownAs []string `json:"alsoKnownAs"`
 		Service     []struct {
@@ -137,14 +147,14 @@ func ResolveService(ctx context.Context, did string) (string, string, error) {
 }
 
 // returns did, service
-func ResolveHandleAndService(ctx context.Context, handle string) (string, string, *echo.HTTPError) {
-	did, err := ResolveHandle(ctx, handle)
+func ResolveHandleAndServiceWithClient(ctx context.Context, handle string, client *http.Client) (string, string, *echo.HTTPError) {
+	did, err := ResolveHandleWithClient(ctx, handle, client)
 	if err != nil {
 		return "", "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to resolve handle '%s': %s", handle, err))
 	}
 
 	var handle2 string
-	service, handle2, err := ResolveService(ctx, did)
+	service, handle2, err := ResolveServiceWithClient(ctx, did, client)
 	if err != nil {
 		return "", "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to resolve service for DID '%s': %s", did, err))
 	}
@@ -154,22 +164,22 @@ func ResolveHandleAndService(ctx context.Context, handle string) (string, string
 	return did, service, nil
 }
 
-func HandleComAtprotoIdentityResolveHandle(c echo.Context) error {
+func (o *OATProxy) HandleComAtprotoIdentityResolveHandle(c echo.Context) error {
 	ctx, span := otel.Tracer("server").Start(c.Request().Context(), "HandleComAtprotoIdentityResolveHandle")
 	defer span.End()
 	handle := c.QueryParam("handle")
 	var out *comatprototypes.IdentityResolveHandle_Output
 	var handleErr error
 	// func (s *Server) handleComAtprotoIdentityResolveHandle(ctx context.Context,handle string) (*comatprototypes.IdentityResolveHandle_Output, error)
-	out, handleErr = handleComAtprotoIdentityResolveHandle(ctx, handle)
+	out, handleErr = handleComAtprotoIdentityResolveHandle(ctx, handle, o.httpClient)
 	if handleErr != nil {
 		return handleErr
 	}
 	return c.JSON(200, out)
 }
 
-func handleComAtprotoIdentityResolveHandle(ctx context.Context, handle string) (*comatprototypes.IdentityResolveHandle_Output, error) {
-	did, err := ResolveHandle(ctx, handle)
+func handleComAtprotoIdentityResolveHandle(ctx context.Context, handle string, client *http.Client) (*comatprototypes.IdentityResolveHandle_Output, error) {
+	did, err := ResolveHandleWithClient(ctx, handle, client)
 	if err != nil {
 		return nil, err
 	}
