@@ -104,9 +104,7 @@ func (o *OAuthSession) Status() OAuthSessionStatus {
 	if o.DownstreamPARRequestURI != "" {
 		return OAuthSessionStatePARCreated
 	}
-	bs, _ := json.Marshal(o)
-	fmt.Printf("unknown oauth session status: %s\n", string(bs))
-	// todo: this should never happen, log a warning? panic?
+	// Unknown state — treat as rejected
 	return OAuthSessionStateRejected
 }
 
@@ -213,6 +211,9 @@ func (o *OATProxy) getOAuthSession(jkt string) (*OAuthSession, error) {
 	}
 
 	oclient, err := o.GetOauthClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get OAuth client: %w", err)
+	}
 
 	dpopKey, err := jwk.ParseKey([]byte(session.UpstreamDPoPPrivateJWK))
 	if err != nil {
