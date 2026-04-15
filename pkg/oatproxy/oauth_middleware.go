@@ -199,7 +199,7 @@ func (o *OATProxy) DPoPNonceMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 		if !slices.Contains(validNonces, dpopClaims.Nonce) {
 			c.Response().Header().Set("WWW-Authenticate", `DPoP algs="RS256 RS384 RS512 PS256 PS384 PS512 ES256 ES256K ES384 ES512", error="use_dpop_nonce", error_description="Authorization server requires nonce in DPoP proof"`)
 			c.Response().Header().Set("DPoP-Nonce", validNonces[0])
-			return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+			return c.JSON(http.StatusBadRequest, map[string]interface{}{
 				"error":             "use_dpop_nonce",
 				"error_description": "Authorization server requires nonce in DPoP proof",
 			})
