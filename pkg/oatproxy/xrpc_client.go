@@ -50,7 +50,7 @@ func (o *OATProxy) GetXrpcClient(session *OAuthSession) (*XrpcClient, error) {
 			if err != nil {
 				o.slog.Error("failed to update OAuth session in OnDpopPdsNonceChanged", "error", err)
 			}
-			o.slog.Info("updated OAuth session in OnDpopPdsNonceChanged", "session", sess)
+			o.slog.Info("updated OAuth session in OnDpopPdsNonceChanged", "did", sess.DID)
 		},
 	}
 	client := &XrpcClient{
