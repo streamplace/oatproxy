@@ -161,13 +161,15 @@ func (o *OATProxy) GetDownstreamMetadata(redirectURI string) (*OAuthClientMetada
 		meta.RedirectURIs = []string{redirectURI}
 	}
 
+	lied := make([]string, len(meta.RedirectURIs))
 	for i, uri := range meta.RedirectURIs {
 		lie, err := redirectLiar(uri, meta.ClientURI)
 		if err != nil {
 			return nil, err
 		}
-		meta.RedirectURIs[i] = lie
+		lied[i] = lie
 	}
+	meta.RedirectURIs = lied
 
 	return &meta, nil
 }
