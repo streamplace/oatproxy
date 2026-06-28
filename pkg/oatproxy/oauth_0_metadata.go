@@ -148,9 +148,13 @@ func (o *OATProxy) GetDownstreamMetadata(redirectURI string) (*OAuthClientMetada
 	meta.DPoPBoundAccessTokens = boolPtr(true)
 	meta.ApplicationType = "web"
 	if redirectURI != "" {
+		unwrapped, err := redirectTruther(redirectURI)
+		if err != nil {
+			return nil, err
+		}
 		found := false
 		for _, uri := range meta.RedirectURIs {
-			if uri == redirectURI {
+			if uri == unwrapped {
 				found = true
 				break
 			}
@@ -158,7 +162,7 @@ func (o *OATProxy) GetDownstreamMetadata(redirectURI string) (*OAuthClientMetada
 		if !found && !o.public {
 			return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("invalid redirect_uri: %s not in allowed URIs", redirectURI))
 		}
-		meta.RedirectURIs = []string{redirectURI}
+		meta.RedirectURIs = []string{unwrapped}
 	}
 
 	lied := make([]string, len(meta.RedirectURIs))
