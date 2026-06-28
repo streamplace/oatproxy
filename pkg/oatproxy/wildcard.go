@@ -44,8 +44,10 @@ func (o *OATProxy) HandleWildcard(c echo.Context) error {
 		xrpcType = xrpc.Query
 		queryParams := make(map[string]any)
 		for k, v := range c.QueryParams() {
-			for _, vv := range v {
-				queryParams[k] = vv
+			if len(v) == 1 {
+				queryParams[k] = v[0]
+			} else if len(v) > 1 {
+				queryParams[k] = v
 			}
 		}
 		err = client.Do(ctx, xrpcType, "application/json", lastSegment, queryParams, nil, &out)
