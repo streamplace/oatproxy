@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/streamplace/atproto-oauth-golang/helpers"
@@ -14,7 +15,12 @@ func (o *OATProxy) HandleOAuthAuthorizationServer(c echo.Context) error {
 	c.Response().Header().Set("Access-Control-Allow-Origin", "*")
 	c.Response().Header().Set("Content-Type", "application/json")
 	c.Response().WriteHeader(200)
-	json.NewEncoder(c.Response().Writer).Encode(generateOAuthServerMetadata(o.host))
+	meta := generateOAuthServerMetadata(o.host)
+	scope := o.scope
+	if scope != "" {
+		meta["scopes_supported"] = strings.Fields(scope)
+	}
+	json.NewEncoder(c.Response().Writer).Encode(meta)
 	return nil
 }
 
