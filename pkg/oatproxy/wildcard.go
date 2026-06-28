@@ -1,7 +1,9 @@
 package oatproxy
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -57,6 +59,9 @@ func (o *OATProxy) HandleWildcard(c echo.Context) error {
 	}
 
 	if err != nil {
+		if errors.Is(err, io.EOF) || strings.Contains(err.Error(), "EOF") {
+			return c.JSON(200, map[string]any{})
+		}
 		o.slog.Error("upstream xrpc error", "error", err)
 		return err
 	}
