@@ -19,6 +19,16 @@ func (o *OATProxy) HandleWildcard(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusUnauthorized, "oauth session not found")
 	}
 
+	forwarded := map[string]string{}
+	for _, name := range []string{"atproto-proxy", "atproto-accept-labelers"} {
+		if v := c.Request().Header.Get(name); v != "" {
+			forwarded[name] = v
+		}
+	}
+	if len(forwarded) > 0 {
+		client.SetHeaders(forwarded)
+	}
+
 	var out map[string]any
 
 	// Get the last path segment in the URL
