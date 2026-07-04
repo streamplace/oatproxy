@@ -20,8 +20,7 @@ func (o *OATProxy) HandleOAuthAuthorizationServer(c echo.Context) error {
 	if scope != "" {
 		meta["scopes_supported"] = strings.Fields(scope)
 	}
-	json.NewEncoder(c.Response().Writer).Encode(meta)
-	return nil
+	return json.NewEncoder(c.Response().Writer).Encode(meta)
 }
 
 func (o *OATProxy) HandleOAuthProtectedResource(c echo.Context) error {
@@ -221,17 +220,10 @@ func redirectTruther(redirectURI string) (string, error) {
 		return redirectURI, nil
 	}
 
-	// Decode the actualRedirect parameter
-	decodedRedirect, err := url.QueryUnescape(actualRedirect)
+	_, err = url.Parse(actualRedirect)
 	if err != nil {
-		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("invalid actualRedirect parameter: %s", actualRedirect))
+		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("invalid actualRedirect URL: %s", actualRedirect))
 	}
 
-	// Validate that the decoded redirect is a valid URL
-	_, err = url.Parse(decodedRedirect)
-	if err != nil {
-		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("invalid actualRedirect URL: %s", decodedRedirect))
-	}
-
-	return decodedRedirect, nil
+	return actualRedirect, nil
 }
