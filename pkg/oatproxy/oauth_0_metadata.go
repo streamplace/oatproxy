@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/streamplace/atproto-oauth-golang/helpers"
@@ -15,12 +14,7 @@ func (o *OATProxy) HandleOAuthAuthorizationServer(c echo.Context) error {
 	c.Response().Header().Set("Access-Control-Allow-Origin", "*")
 	c.Response().Header().Set("Content-Type", "application/json")
 	c.Response().WriteHeader(200)
-	meta := generateOAuthServerMetadata(o.host)
-	scope := o.scope
-	if scope != "" {
-		meta["scopes_supported"] = strings.Fields(scope)
-	}
-	return json.NewEncoder(c.Response().Writer).Encode(meta)
+	return json.NewEncoder(c.Response().Writer).Encode(o.generateOAuthServerMetadata())
 }
 
 func (o *OATProxy) HandleOAuthProtectedResource(c echo.Context) error {
@@ -96,13 +90,18 @@ func (o *OATProxy) GetUpstreamMetadata() *OAuthClientMetadata {
 	return &meta
 }
 
-func generateOAuthServerMetadata(host string) map[string]any {
+func (o *OATProxy) generateOAuthServerMetadata() map[string]any {
+	host := o.host
+	scopesSupported := ParseScope(o.scope)
+	if len(scopesSupported) == 0 {
+		scopesSupported = []string{"atproto", "transition:generic", "transition:chat.bsky"}
+	}
 	oauthServerMetadata := map[string]any{
 		"issuer":                                         fmt.Sprintf("https://%s", host),
 		"request_parameter_supported":                    true,
 		"request_uri_parameter_supported":                true,
 		"require_request_uri_registration":               true,
-		"scopes_supported":                               []string{"atproto", "transition:generic", "transition:chat.bsky"},
+		"scopes_supported":                               scopesSupported,
 		"subject_types_supported":                        []string{"public"},
 		"response_types_supported":                       []string{"code"},
 		"response_modes_supported":                       []string{"query", "fragment", "form_post"},

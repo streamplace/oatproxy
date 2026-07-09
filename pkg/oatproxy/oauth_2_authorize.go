@@ -158,7 +158,13 @@ func (o *OATProxy) Authorize(ctx context.Context, requestURI, clientID string) (
 		loginHint = ""
 	}
 
-	parResp, err := oclient.SendParAuthRequest(ctx, authserver, authmeta, loginHint, upstreamMeta.Scope, k, opts)
+	// request the scope the downstream client asked for at PAR time; sessions
+	// from before scope tracking fall back to the full configured scope
+	requestedScope := session.DownstreamScope
+	if requestedScope == "" {
+		requestedScope = upstreamMeta.Scope
+	}
+	parResp, err := oclient.SendParAuthRequest(ctx, authserver, authmeta, loginHint, requestedScope, k, opts)
 	if err != nil {
 		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to send PAR auth request to '%s': %s", authserver, err))
 	}
