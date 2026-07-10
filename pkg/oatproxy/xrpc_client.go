@@ -78,7 +78,7 @@ func (c *XrpcClient) Do(ctx context.Context, kind string, inpenc, method string,
 	}
 	xErr, ok := err.(*xrpc.Error)
 	if !ok {
-		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error()).SetInternal(err)
 	}
 	if xErr.StatusCode == http.StatusTooManyRequests {
 		if xErr.Ratelimit == nil {

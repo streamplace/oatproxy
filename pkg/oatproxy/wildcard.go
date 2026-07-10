@@ -1,7 +1,9 @@
 package oatproxy
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -19,6 +21,16 @@ func (o *OATProxy) HandleWildcard(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusUnauthorized, "oauth session not found")
 	}
 
+	forwarded := map[string]string{}
+	for _, name := range []string{"atproto-proxy", "atproto-accept-labelers"} {
+		if v := c.Request().Header.Get(name); v != "" {
+			forwarded[name] = v
+		}
+	}
+	if len(forwarded) > 0 {
+		client.SetHeaders(forwarded)
+	}
+
 	var out map[string]any
 
 	// Get the last path segment in the URL
@@ -32,8 +44,10 @@ func (o *OATProxy) HandleWildcard(c echo.Context) error {
 		xrpcType = xrpc.Query
 		queryParams := make(map[string]any)
 		for k, v := range c.QueryParams() {
-			for _, vv := range v {
-				queryParams[k] = vv
+			if len(v) == 1 {
+				queryParams[k] = v[0]
+			} else if len(v) > 1 {
+				queryParams[k] = v
 			}
 		}
 		err = client.Do(ctx, xrpcType, "application/json", lastSegment, queryParams, nil, &out)
@@ -47,6 +61,9 @@ func (o *OATProxy) HandleWildcard(c echo.Context) error {
 	}
 
 	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return c.JSON(200, map[string]any{})
+		}
 		o.slog.Error("upstream xrpc error", "error", err)
 		return err
 	}

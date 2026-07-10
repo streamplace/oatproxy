@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/streamplace/atproto-oauth-golang/helpers"
@@ -14,8 +15,12 @@ func (o *OATProxy) HandleOAuthAuthorizationServer(c echo.Context) error {
 	c.Response().Header().Set("Access-Control-Allow-Origin", "*")
 	c.Response().Header().Set("Content-Type", "application/json")
 	c.Response().WriteHeader(200)
-	json.NewEncoder(c.Response().Writer).Encode(generateOAuthServerMetadata(o.host))
-	return nil
+	meta := generateOAuthServerMetadata(o.host)
+	scope := o.scope
+	if scope != "" {
+		meta["scopes_supported"] = strings.Fields(scope)
+	}
+	return json.NewEncoder(c.Response().Writer).Encode(meta)
 }
 
 func (o *OATProxy) HandleOAuthProtectedResource(c echo.Context) error {
@@ -148,9 +153,13 @@ func (o *OATProxy) GetDownstreamMetadata(redirectURI string) (*OAuthClientMetada
 	meta.DPoPBoundAccessTokens = boolPtr(true)
 	meta.ApplicationType = "web"
 	if redirectURI != "" {
+		unwrapped, err := redirectTruther(redirectURI)
+		if err != nil {
+			return nil, err
+		}
 		found := false
 		for _, uri := range meta.RedirectURIs {
-			if uri == redirectURI {
+			if uri == unwrapped {
 				found = true
 				break
 			}
@@ -158,16 +167,18 @@ func (o *OATProxy) GetDownstreamMetadata(redirectURI string) (*OAuthClientMetada
 		if !found && !o.public {
 			return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("invalid redirect_uri: %s not in allowed URIs", redirectURI))
 		}
-		meta.RedirectURIs = []string{redirectURI}
+		meta.RedirectURIs = []string{unwrapped}
 	}
 
+	lied := make([]string, len(meta.RedirectURIs))
 	for i, uri := range meta.RedirectURIs {
 		lie, err := redirectLiar(uri, meta.ClientURI)
 		if err != nil {
 			return nil, err
 		}
-		meta.RedirectURIs[i] = lie
+		lied[i] = lie
 	}
+	meta.RedirectURIs = lied
 
 	return &meta, nil
 }
@@ -209,17 +220,10 @@ func redirectTruther(redirectURI string) (string, error) {
 		return redirectURI, nil
 	}
 
-	// Decode the actualRedirect parameter
-	decodedRedirect, err := url.QueryUnescape(actualRedirect)
+	_, err = url.Parse(actualRedirect)
 	if err != nil {
-		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("invalid actualRedirect parameter: %s", actualRedirect))
+		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("invalid actualRedirect URL: %s", actualRedirect))
 	}
 
-	// Validate that the decoded redirect is a valid URL
-	_, err = url.Parse(decodedRedirect)
-	if err != nil {
-		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("invalid actualRedirect URL: %s", decodedRedirect))
-	}
-
-	return decodedRedirect, nil
+	return actualRedirect, nil
 }

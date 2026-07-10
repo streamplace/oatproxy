@@ -114,7 +114,8 @@ func (o *OATProxy) NewPAR(ctx context.Context, c echo.Context, par *PAR, dpopHea
 	}
 	nonces := generateValidNonces(session.DownstreamDPoPNoncePad, time.Now())
 	if !slices.Contains(nonces, claims.Nonce) {
-		return nil, echo.NewHTTPError(http.StatusBadRequest, "invalid nonce")
+		c.Response().Header().Set("DPoP-Nonce", nonces[0])
+		return nil, ErrFirstNonce
 	}
 	proof, err := dpop.Parse(dpopHeader, dpop.POST, expectedURL, dpop.ParseOptions{
 		Nonce:      claims.Nonce,
