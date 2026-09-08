@@ -86,6 +86,8 @@ func (o *OATProxy) GetUpstreamMetadata() *OAuthClientMetadata {
 		clientIDURL := o.publicClientID(u.String())
 		meta.ClientID = clientIDURL.String()
 		meta.RedirectURIs = []string{u.String()}
+		meta.TokenEndpointAuthMethod = "none"
+		meta.TokenEndpointAuthSigningAlg = ""
 	}
 	return &meta
 }
