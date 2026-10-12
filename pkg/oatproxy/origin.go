@@ -56,10 +56,17 @@ func validLoopbackRedirect(raw string) bool {
 // localhost client IDs are self-describing public clients under the AT Protocol
 // OAuth profile. They never authorize a network metadata fetch or client assertion.
 func (o *OATProxy) downstreamMetadata(clientID, redirectURI string) (*OAuthClientMetadata, error) {
+	if o.public && o.baseURL == "" {
+		return o.GetDownstreamMetadata(redirectURI)
+	}
 	u, err := url.Parse(clientID)
 	if err == nil && u.Scheme == "http" && u.Host == "localhost" && u.User == nil && u.Path == "" && u.Fragment == "" {
 		q, err := url.ParseQuery(u.RawQuery)
-		if err != nil || len(q) != 2 || len(q["scope"]) != 1 || len(q["redirect_uri"]) != 1 || o.validateRequestedScope(q.Get("scope")) != nil || q.Get("redirect_uri") != redirectURI || !validLoopbackRedirect(redirectURI) {
+		scope := q.Get("scope")
+		invalidScope := strings.IndexFunc(scope, func(r rune) bool {
+			return r != ' ' && (r < 0x21 || r == '"' || r == '\\' || r > 0x7e)
+		}) >= 0
+		if err != nil || len(q) != 2 || len(q["scope"]) != 1 || len(q["redirect_uri"]) != 1 || invalidScope || !ScopeContains(scope, "atproto") || q.Get("redirect_uri") != redirectURI || !validLoopbackRedirect(redirectURI) {
 			return nil, echo.NewHTTPError(http.StatusBadRequest, "invalid localhost client metadata")
 		}
 		if o.loopback() {

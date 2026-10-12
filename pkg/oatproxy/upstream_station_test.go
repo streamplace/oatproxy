@@ -119,6 +119,43 @@ func TestExplicitOriginAndLocalClientMetadata(t *testing.T) {
 	require.Error(t, validateOrigin(localOrigin, false), "upstream stations cannot use HTTP")
 }
 
+func TestLocalClientDeclaredScopeDoesNotRestrictRequestedSubset(t *testing.T) {
+	local, _, _ := chainProxy(t)
+	meta := local.GetUpstreamMetadata()
+	station, db, key := chainProxy(t)
+	station.baseURL = "https://station.example.com"
+	station.scope = "atproto"
+	par := &PAR{ClientID: meta.ClientID, RedirectURI: meta.RedirectURIs[0], Scope: "atproto",
+		LoginHint: "did:plc:account", State: "local-state", CodeChallenge: "challenge", CodeChallengeMethod: "S256", ResponseType: "code"}
+	c := station.Echo.NewContext(httptest.NewRequest(http.MethodPost, "/oauth/par", nil), httptest.NewRecorder())
+	endpoint := station.origin() + "/oauth/par"
+	_, err := station.NewPAR(t.Context(), c, par, chainProof(t, key, "POST", endpoint, "", ""))
+	require.ErrorIs(t, err, ErrFirstNonce)
+	nonce := c.Response().Header().Get("DPoP-Nonce")
+	_, err = station.NewPAR(t.Context(), c, par, chainProof(t, key, "POST", endpoint, nonce, ""))
+	require.NoError(t, err)
+	var session OAuthSession
+	require.NoError(t, db.First(&session).Error)
+	require.Equal(t, "atproto", session.DownstreamScope)
+	par.Scope = testFullScope
+	_, err = station.NewPAR(t.Context(), c, par, chainProof(t, key, "POST", endpoint, nonce, ""))
+	require.Error(t, err, "the requested scope must still respect the station maximum")
+}
+
+func TestLegacyPublicHTTPSCallbackMetadata(t *testing.T) {
+	o, _, _ := chainProxy(t)
+	o.baseURL = ""
+	o.public = true
+	o.host = "station.example.com"
+	o.clientMetadata.RedirectURIs = []string{"https://station.example.com/login"}
+	meta, err := o.GetDownstreamMetadata(o.clientMetadata.RedirectURIs[0])
+	require.NoError(t, err)
+	resolved, err := o.downstreamMetadata(meta.ClientID, meta.RedirectURIs[0])
+	require.NoError(t, err)
+	require.Equal(t, meta.ClientID, resolved.ClientID)
+	require.Equal(t, meta.RedirectURIs, resolved.RedirectURIs)
+}
+
 func mustParseURL(t *testing.T, raw string) *url.URL {
 	t.Helper()
 	u, err := url.Parse(raw)
