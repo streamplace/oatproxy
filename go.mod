@@ -15,7 +15,7 @@ require (
 	github.com/orandin/slog-gorm v1.4.0
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/peterbourgon/ff/v3 v3.4.0
-	github.com/streamplace/atproto-oauth-golang v0.0.0-20260413212710-98956064d06c
+	github.com/streamplace/atproto-oauth-golang v0.0.0-20260908211910-e9bac3356167
 	github.com/stretchr/testify v1.10.0
 	go.opentelemetry.io/otel v1.36.0
 	gorm.io/driver/sqlite v1.5.7

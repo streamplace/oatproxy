@@ -72,7 +72,7 @@ func (o *OATProxy) NewPAR(ctx context.Context, c echo.Context, par *PAR, dpopHea
 	}
 	var expectedURL *url.URL
 	var upstreamAuthServerURL string
-	if o.public {
+	if o.public && o.baseURL == "" {
 		_, service, httpErr := ResolveHandleAndServiceWithClient(ctx, par.LoginHint, o.httpClient)
 		if httpErr != nil {
 			return nil, httpErr
@@ -88,7 +88,7 @@ func (o *OATProxy) NewPAR(ctx context.Context, c echo.Context, par *PAR, dpopHea
 		upstreamAuthServerURL = authserver
 		expectedURL = &url.URL{Host: strings.TrimPrefix(authserver, "https://"), Scheme: "https", Path: "/oauth/par"}
 	} else {
-		expectedURL = &url.URL{Host: o.host, Scheme: "https", Path: "/oauth/par"}
+		expectedURL = o.endpoint("/oauth/par")
 	}
 	// special case - if this is the first request, we need to send it back for a new nonce
 	if session == nil {
@@ -135,7 +135,7 @@ func (o *OATProxy) NewPAR(ctx context.Context, c echo.Context, par *PAR, dpopHea
 		panic("invalid code path: parsed DPoP proof twice and got different keys?!")
 	}
 
-	clientMetadata, err := o.GetDownstreamMetadata(par.RedirectURI)
+	clientMetadata, err := o.downstreamMetadata(par.ClientID, par.RedirectURI)
 	if err != nil {
 		return nil, err
 	}
@@ -145,6 +145,9 @@ func (o *OATProxy) NewPAR(ctx context.Context, c echo.Context, par *PAR, dpopHea
 
 	if !slices.Contains(clientMetadata.RedirectURIs, par.RedirectURI) {
 		return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("invalid redirect_uri: %s not in allowed URIs", par.RedirectURI))
+	}
+	if par.ResponseMode == "" {
+		par.ResponseMode = "query"
 	}
 
 	if par.CodeChallengeMethod != "S256" {
@@ -175,15 +178,20 @@ func (o *OATProxy) NewPAR(ctx context.Context, c echo.Context, par *PAR, dpopHea
 	if err != nil {
 		return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("invalid redirect_uri: %s", err))
 	}
+	if err := session.CacheJTI(claims.ID); err != nil {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "DPoP proof already used")
+	}
 
 	urn := makeURN(jkt)
 
 	err = o.updateOAuthSession(jkt, &OAuthSession{
 		DownstreamDPoPJKT:       jkt,
+		DownstreamClientID:      par.ClientID,
+		DownstreamScope:         par.Scope,
+		DownstreamJTICache:      session.DownstreamJTICache,
 		DownstreamPARRequestURI: urn,
 		DownstreamCodeChallenge: par.CodeChallenge,
 		DownstreamState:         par.State,
-		DownstreamScope:         par.Scope,
 		DownstreamRedirectURI:   realRedirectURI,
 		Handle:                  par.LoginHint,
 		UpstreamAuthServerURL:   upstreamAuthServerURL,
