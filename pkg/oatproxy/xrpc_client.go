@@ -24,6 +24,9 @@ func rateLimitCacheKey(session *OAuthSession) string {
 }
 
 func (o *OATProxy) GetXrpcClient(session *OAuthSession) (*XrpcClient, error) {
+	if o.upstreamURL != "" && session.PDSUrl != o.upstreamURL {
+		return nil, fmt.Errorf("OAuth session belongs to a different upstream; please log in again")
+	}
 	cacheKey := rateLimitCacheKey(session)
 	key, err := jwk.ParseKey([]byte(session.UpstreamDPoPPrivateJWK))
 	if err != nil {
@@ -39,6 +42,7 @@ func (o *OATProxy) GetXrpcClient(session *OAuthSession) (*XrpcClient, error) {
 	}
 
 	xrpcClient := &oauth.XrpcClient{
+		Client: o.httpClient,
 		OnDpopPdsNonceChanged: func(did, newNonce string) {
 			sess, err := o.getOAuthSession(session.DownstreamDPoPJKT)
 			if err != nil {

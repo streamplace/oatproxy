@@ -45,6 +45,9 @@ func parseURN(urn string) (string, string, error) {
 		return "", "", fmt.Errorf("invalid URN: %s", urn)
 	}
 	withoutPrefix := urn[len(urnPrefix):]
+	if len(withoutPrefix) <= UUID_LENGTH {
+		return "", "", fmt.Errorf("invalid URN: %s", urn)
+	}
 	uu := withoutPrefix[:UUID_LENGTH]
 	suffix := withoutPrefix[UUID_LENGTH:]
 	return suffix, uu, nil
@@ -102,6 +105,9 @@ func getJKT(dpopJWT string) (string, *dpop.ProofTokenClaims, error) {
 }
 
 func (o *OATProxy) authServerURL(session *OAuthSession, path string) *url.URL {
+	if o.baseURL != "" {
+		return o.endpoint(path)
+	}
 	if o.public {
 		u, err := url.Parse(session.UpstreamAuthServerURL)
 		if err != nil {
@@ -114,6 +120,9 @@ func (o *OATProxy) authServerURL(session *OAuthSession, path string) *url.URL {
 }
 
 func (o *OATProxy) pdsServerURL(session *OAuthSession, path string) *url.URL {
+	if o.baseURL != "" {
+		return o.endpoint(path)
+	}
 	if o.public {
 		u, err := url.Parse(session.PDSUrl)
 		if err != nil {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/streamplace/atproto-oauth-golang/helpers"
@@ -14,14 +15,26 @@ func (o *OATProxy) HandleOAuthAuthorizationServer(c echo.Context) error {
 	c.Response().Header().Set("Access-Control-Allow-Origin", "*")
 	c.Response().Header().Set("Content-Type", "application/json")
 	c.Response().WriteHeader(200)
-	return json.NewEncoder(c.Response().Writer).Encode(o.generateOAuthServerMetadata())
+	meta := generateOAuthServerMetadata(o.host)
+	if o.baseURL != "" {
+		for key, value := range meta {
+			if raw, ok := value.(string); ok && strings.HasPrefix(raw, "https://"+o.host) {
+				meta[key] = o.origin() + strings.TrimPrefix(raw, "https://"+o.host)
+			}
+		}
+	}
+	scope := o.scope
+	if scope != "" {
+		meta["scopes_supported"] = strings.Fields(scope)
+	}
+	return json.NewEncoder(c.Response().Writer).Encode(meta)
 }
 
 func (o *OATProxy) HandleOAuthProtectedResource(c echo.Context) error {
 	return c.JSON(200, map[string]interface{}{
-		"resource": fmt.Sprintf("https://%s", o.host),
+		"resource": o.origin(),
 		"authorization_servers": []string{
-			fmt.Sprintf("https://%s", o.host),
+			o.origin(),
 		},
 		"scopes_supported": []string{},
 		"bearer_methods_supported": []string{
@@ -67,6 +80,19 @@ func (o *OATProxy) publicClientID(redirectURI string) *url.URL {
 
 func (o *OATProxy) GetUpstreamMetadata() *OAuthClientMetadata {
 	meta := *o.clientMetadata
+	if o.loopback() {
+		callback := o.origin() + "/oauth/return"
+		meta.ClientID = o.publicClientID(callback).String()
+		meta.ClientURI = o.origin()
+		meta.RedirectURIs = []string{callback}
+		meta.TokenEndpointAuthMethod = "none"
+		meta.ResponseTypes = []string{"code"}
+		meta.GrantTypes = []string{"authorization_code", "refresh_token"}
+		meta.DPoPBoundAccessTokens = boolPtr(true)
+		meta.JwksURI = ""
+		meta.TokenEndpointAuthSigningAlg = ""
+		return &meta
+	}
 	meta.JwksURI = fmt.Sprintf("https://%s/oauth/upstream/jwks.json", o.host)
 	meta.ClientURI = fmt.Sprintf("https://%s", o.host)
 	meta.TokenEndpointAuthMethod = "private_key_jwt"
@@ -92,18 +118,13 @@ func (o *OATProxy) GetUpstreamMetadata() *OAuthClientMetadata {
 	return &meta
 }
 
-func (o *OATProxy) generateOAuthServerMetadata() map[string]any {
-	host := o.host
-	scopesSupported := ParseScope(o.scope)
-	if len(scopesSupported) == 0 {
-		scopesSupported = []string{"atproto", "transition:generic", "transition:chat.bsky"}
-	}
+func generateOAuthServerMetadata(host string) map[string]any {
 	oauthServerMetadata := map[string]any{
 		"issuer":                                         fmt.Sprintf("https://%s", host),
 		"request_parameter_supported":                    true,
 		"request_uri_parameter_supported":                true,
 		"require_request_uri_registration":               true,
-		"scopes_supported":                               scopesSupported,
+		"scopes_supported":                               []string{"atproto", "transition:generic", "transition:chat.bsky"},
 		"subject_types_supported":                        []string{"public"},
 		"response_types_supported":                       []string{"code"},
 		"response_modes_supported":                       []string{"query", "fragment", "form_post"},
@@ -141,6 +162,17 @@ func (o *OATProxy) generateOAuthServerMetadata() map[string]any {
 
 func (o *OATProxy) GetDownstreamMetadata(redirectURI string) (*OAuthClientMetadata, error) {
 	meta := *o.clientMetadata
+	if o.loopback() {
+		if redirectURI == "" {
+			redirectURI = o.clientMetadata.RedirectURIs[0]
+		}
+		u, err := url.Parse(redirectURI)
+		if err != nil || !validLoopbackRedirect(redirectURI) || u.Scheme+"://"+u.Host != o.origin() ||
+			(u.Path != "/login" && u.Path != "/api/app-return" && !strings.HasPrefix(u.Path, "/app-return/")) {
+			return nil, echo.NewHTTPError(http.StatusBadRequest, "invalid local redirect_uri")
+		}
+		return o.downstreamMetadata(o.publicClientID(redirectURI).String(), redirectURI)
+	}
 	if !o.public {
 		meta.ClientID = fmt.Sprintf("https://%s/oauth/downstream/client-metadata.json", o.host)
 	} else {
