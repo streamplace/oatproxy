@@ -157,7 +157,7 @@ func (o *OATProxy) OAuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 			return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("could not cache jti: %v", err))
 		}
 
-		err = o.updateOAuthSession(session.DownstreamDPoPJKT, session)
+		err = o.saveSession(session)
 		if err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("could not update oauth session: %v", err))
 		}

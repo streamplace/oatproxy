@@ -45,6 +45,9 @@ func parseURN(urn string) (string, string, error) {
 		return "", "", fmt.Errorf("invalid URN: %s", urn)
 	}
 	withoutPrefix := urn[len(urnPrefix):]
+	if len(withoutPrefix) <= UUID_LENGTH {
+		return "", "", fmt.Errorf("invalid URN: %s", urn)
+	}
 	uu := withoutPrefix[:UUID_LENGTH]
 	suffix := withoutPrefix[UUID_LENGTH:]
 	return suffix, uu, nil

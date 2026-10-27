@@ -18,6 +18,11 @@ type OAuthSession struct {
 	Handle string `json:"handle" gorm:"column:handle;index"` // possibly also did if they have no handle
 	PDSUrl string `json:"pds_url" gorm:"column:pds_url;index"`
 
+	// UpstreamJKT is set on a linked session: the DownstreamDPoPJKT of the
+	// root session whose upstream session it shares. A linked row never
+	// stores upstream state; loading it merges in the root's.
+	UpstreamJKT string `json:"upstream_jkt" gorm:"column:upstream_jkt;index"`
+
 	// Upstream fields
 	UpstreamState               string     `json:"upstream_state" gorm:"column:upstream_state;index"`
 	UpstreamAuthServerIssuer    string     `json:"upstream_auth_server_issuer" gorm:"column:upstream_auth_server_issuer"`
@@ -154,6 +159,35 @@ func (o *OATProxy) RefreshIfNeeded(session *OAuthSession) (*OAuthSession, error)
 	return o.getOAuthSession(session.DownstreamDPoPJKT)
 }
 
+// copyUpstream copies the upstream session state (everything a linked
+// session borrows from its root) from src to dst.
+func copyUpstream(dst, src *OAuthSession) {
+	dst.UpstreamState = src.UpstreamState
+	dst.UpstreamAuthServerIssuer = src.UpstreamAuthServerIssuer
+	dst.UpstreamPKCEVerifier = src.UpstreamPKCEVerifier
+	dst.UpstreamDPoPNonce = src.UpstreamDPoPNonce
+	dst.UpstreamDPoPPrivateJWK = src.UpstreamDPoPPrivateJWK
+	dst.UpstreamAccessToken = src.UpstreamAccessToken
+	dst.UpstreamAccessTokenExp = src.UpstreamAccessTokenExp
+	dst.UpstreamAccessTokenLifetime = src.UpstreamAccessTokenLifetime
+	dst.UpstreamRefreshToken = src.UpstreamRefreshToken
+	dst.UpstreamAuthServerURL = src.UpstreamAuthServerURL
+	dst.UpstreamScope = src.UpstreamScope
+	dst.RevokedAt = src.RevokedAt
+}
+
+// saveSession persists a session's downstream state. A linked session was
+// loaded with its root's upstream state merged in; that state belongs to
+// the root row, so it is stripped before writing.
+func (o *OATProxy) saveSession(session *OAuthSession) error {
+	if session.UpstreamJKT == "" {
+		return o.updateOAuthSession(session.DownstreamDPoPJKT, session)
+	}
+	downstream := *session
+	copyUpstream(&downstream, &OAuthSession{})
+	return o.updateOAuthSession(session.DownstreamDPoPJKT, &downstream)
+}
+
 func (o *OATProxy) getOAuthSession(jkt string) (*OAuthSession, error) {
 	session, err := o.userGetOAuthSession(jkt)
 	if err != nil {
@@ -162,7 +196,42 @@ func (o *OATProxy) getOAuthSession(jkt string) (*OAuthSession, error) {
 	if session == nil {
 		return nil, nil
 	}
-	if session.Status() != OAuthSessionStateReady {
+	if session.UpstreamJKT == "" {
+		return o.refreshIfNeeded(jkt, session)
+	}
+	// linked session: refresh happens on the root, under the root's lock
+	root, err := o.userGetOAuthSession(session.UpstreamJKT)
+	if err != nil {
+		return nil, err
+	}
+	if root != nil && root.UpstreamJKT == "" {
+		root, err = o.refreshIfNeeded(root.DownstreamDPoPJKT, root)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if root == nil || root.UpstreamJKT != "" {
+		// missing (or malformed) root: nothing to borrow, so the link is dead
+		now := time.Now()
+		session.RevokedAt = &now
+		return session, nil
+	}
+	copyUpstream(session, root)
+	session.DID = root.DID
+	session.Handle = root.Handle
+	session.PDSUrl = root.PDSUrl
+	return session, nil
+}
+
+// refreshIfNeeded refreshes an unlinked session's upstream tokens if they're
+// close to expiry. Sessions whose downstream logged out (ready-upstream)
+// refresh too, since linked sessions may still be using them.
+func (o *OATProxy) refreshIfNeeded(jkt string, session *OAuthSession) (*OAuthSession, error) {
+	status := session.Status()
+	if status != OAuthSessionStateReady && status != OAuthSessionStateReadyUpstream {
+		return session, nil
+	}
+	if session.UpstreamAccessTokenExp == nil {
 		return session, nil
 	}
 
