@@ -159,8 +159,8 @@ func (o *OATProxy) NewPAR(ctx context.Context, c echo.Context, par *PAR, dpopHea
 		return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("invalid response type: expected code, got %s", par.ResponseType))
 	}
 
-	if par.Scope != o.scope {
-		return nil, echo.NewHTTPError(http.StatusBadRequest, "invalid scope")
+	if httpErr := o.validateRequestedScope(par.Scope); httpErr != nil {
+		return nil, httpErr
 	}
 
 	if par.LoginHint == "" && o.defaultPDS == "" {
@@ -169,10 +169,6 @@ func (o *OATProxy) NewPAR(ctx context.Context, c echo.Context, par *PAR, dpopHea
 
 	if par.State == "" {
 		return nil, echo.NewHTTPError(http.StatusBadRequest, "state is required")
-	}
-
-	if par.Scope != o.scope {
-		return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("invalid scope (expected %s, got %s)", o.scope, par.Scope))
 	}
 
 	realRedirectURI, err := redirectTruther(par.RedirectURI)
@@ -187,6 +183,7 @@ func (o *OATProxy) NewPAR(ctx context.Context, c echo.Context, par *PAR, dpopHea
 		DownstreamPARRequestURI: urn,
 		DownstreamCodeChallenge: par.CodeChallenge,
 		DownstreamState:         par.State,
+		DownstreamScope:         par.Scope,
 		DownstreamRedirectURI:   realRedirectURI,
 		Handle:                  par.LoginHint,
 		UpstreamAuthServerURL:   upstreamAuthServerURL,

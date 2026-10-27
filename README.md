@@ -192,6 +192,25 @@ customResolver = new StreamplaceOAuthResolver(
 client.oauthResolver = customResolver;
 ```
 
+# Scopes
+
+The `Scope` you configure is the _maximum_ scope. At login time, a downstream
+client may request any subset of it (the subset must still include `atproto`)
+by passing a `scope` when starting the flow, e.g. with
+`@atproto/oauth-client`:
+
+```typescript
+await client.authorize(handle, { scope: "atproto repo?collection=my.app.record" });
+```
+
+The scope actually granted by the user's PDS is tracked per session and
+reported honestly by the token endpoint and by `POST /oauth/introspect`
+(RFC 7662-shaped self-introspection: authenticate with your DPoP-bound access
+token and it describes that token, including its `scope`). Server-side, use
+`session.HasScope("...")` before acting on a user's behalf; sessions created
+before scope tracking existed count as full grants, so no migration is
+needed.
+
 # Partial List of Endpoints
 
 These can be useful for debugging purposes:
@@ -200,6 +219,7 @@ These can be useful for debugging purposes:
 | ---------------------------------------- | ------------------------------------------------------------------------------ |
 | `/oauth/downstream/client-metadata.json` | "Public" client metadata document presented to the "downstream" browser client |
 | `/oauth/upstream/client-metadata.json`   | "Confidential" client metadata presented to the "upstream" PDS                 |
+| `/oauth/introspect`                      | RFC 7662 self-introspection for downstream access tokens (scope, sub, exp)    |
 
 # Building
 

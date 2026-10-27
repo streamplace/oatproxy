@@ -35,9 +35,12 @@ type Config struct {
 	GetOAuthSession    func(id string) (*OAuthSession, error)
 	// Lock on the given key, return a function to unlock. If not provided, OATProxy will use a local lock,
 	// but you'll run into trouble with multiple nodes attempting to refresh the same session at the same time.
-	Lock           func(id string) (func(), error)
-	Host           string
-	Scope          string
+	Lock func(id string) (func(), error)
+	Host string
+	// Scope is the maximum scope this proxy will request upstream. Downstream
+	// clients may request any subset of it (which must include "atproto") at
+	// login time; the granted scope is tracked per session.
+	Scope string
 	UpstreamJWK    jwk.Key
 	DownstreamJWK  jwk.Key
 	Slog           *slog.Logger
@@ -94,6 +97,7 @@ func New(conf *Config) *OATProxy {
 	o.Echo.GET("/oauth/return", o.HandleOAuthReturn)
 	o.Echo.POST("/oauth/token", o.DPoPNonceMiddleware(o.HandleOAuthToken))
 	o.Echo.POST("/oauth/revoke", o.DPoPNonceMiddleware(o.HandleOAuthRevoke))
+	o.Echo.POST("/oauth/introspect", o.OAuthMiddleware(o.HandleOAuthIntrospect))
 	o.Echo.GET("/oauth/upstream/client-metadata.json", o.HandleClientMetadataUpstream)
 	o.Echo.GET("/oauth/upstream/jwks.json", o.HandleJwksUpstream)
 	o.Echo.GET("/oauth/downstream/client-metadata.json", o.HandleClientMetadataDownstream)
