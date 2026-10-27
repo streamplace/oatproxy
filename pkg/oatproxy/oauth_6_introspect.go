@@ -60,7 +60,7 @@ func (o *OATProxy) HandleOAuthIntrospect(c echo.Context) error {
 		return c.JSON(http.StatusOK, inactiveToken)
 	}
 
-	downstreamMeta, err := o.GetDownstreamMetadata("")
+	downstreamMeta, err := o.sessionMetadata(session)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("failed to get downstream metadata: %s", err))
 	}
@@ -72,7 +72,7 @@ func (o *OATProxy) HandleOAuthIntrospect(c echo.Context) error {
 		TokenType: "DPoP",
 		Sub:       session.DID,
 		Aud:       fmt.Sprintf("did:web:%s", o.host),
-		Iss:       fmt.Sprintf("https://%s", o.host),
+		Iss:       o.origin(),
 		Jti:       claims.ID,
 	}
 	if claims.ExpiresAt != nil {

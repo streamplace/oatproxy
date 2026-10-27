@@ -97,8 +97,8 @@ func (o *OATProxy) OAuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 			// but they're not actually for this server
 			return next(c)
 		}
-		if session.RevokedAt != nil {
-			return echo.NewHTTPError(http.StatusUnauthorized, "oauth session revoked")
+		if session.Status() != OAuthSessionStateReady {
+			return echo.NewHTTPError(http.StatusUnauthorized, "oauth session is not ready")
 		}
 
 		validNonces := generateValidNonces(session.DownstreamDPoPNoncePad, time.Now())
@@ -142,7 +142,7 @@ func (o *OATProxy) OAuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 		accessClaims := &dpop.BoundAccessTokenClaims{}
 		accessTokenJWT, err := jwt.ParseWithClaims(token, accessClaims, func(token *jwt.Token) (any, error) {
 			return &pubKeyECDSA, nil
-		})
+		}, jwt.WithValidMethods([]string{"ES256"}), jwt.WithIssuer(o.origin()), jwt.WithAudience(fmt.Sprintf("did:web:%s", o.host)))
 		if err != nil {
 			return echo.NewHTTPError(http.StatusUnauthorized, fmt.Sprintf("could not parse access token: %v", err))
 		}
@@ -205,6 +205,21 @@ func (o *OATProxy) DPoPNonceMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 			})
 		}
 		c.Response().Header().Set("DPoP-Nonce", validNonces[0])
+		method, err := getMethod(c.Request().Method)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid DPoP method")
+		}
+		if _, err := dpop.Parse(dpopHeader, method, o.authServerURL(session, c.Request().URL.Path), dpop.ParseOptions{
+			Nonce: dpopClaims.Nonce, TimeWindow: &dpopTimeWindow,
+		}); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid DPoP proof")
+		}
+		if err := session.CacheJTI(dpopClaims.ID); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "DPoP proof already used")
+		}
+		if err := o.updateOAuthSession(jkt, session); err != nil {
+			return err
+		}
 
 		c.Set("session", session)
 		return next(c)

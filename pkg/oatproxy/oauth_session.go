@@ -35,6 +35,7 @@ type OAuthSession struct {
 
 	// Downstream fields
 	DownstreamDPoPNoncePad      string     `json:"downstream_dpop_nonce_pad" gorm:"column:downstream_dpop_nonce_pad"`
+	DownstreamClientID          string     `json:"downstream_client_id" gorm:"column:downstream_client_id"`
 	DownstreamDPoPJKT           string     `json:"downstream_dpop_jkt" gorm:"column:downstream_dpop_jkt;primaryKey"`
 	DownstreamAccessToken       string     `json:"downstream_access_token" gorm:"column:downstream_access_token;index"`
 	DownstreamRefreshToken      string     `json:"downstream_refresh_token" gorm:"column:downstream_refresh_token;index"`
@@ -162,8 +163,14 @@ func (o *OATProxy) getOAuthSession(jkt string) (*OAuthSession, error) {
 	if session == nil {
 		return nil, nil
 	}
-	if session.Status() != OAuthSessionStateReady {
+	if session.Status() != OAuthSessionStateReady && session.Status() != OAuthSessionStateReadyUpstream {
 		return session, nil
+	}
+	if o.upstreamURL != "" && session.PDSUrl != o.upstreamURL {
+		return nil, fmt.Errorf("OAuth session belongs to a different upstream; please log in again")
+	}
+	if session.UpstreamAccessTokenExp == nil {
+		return nil, fmt.Errorf("ready OAuth session has no upstream access expiry")
 	}
 
 	// Refresh when <15% of the lifetime is remaining, but no more than 15 minutes before expiry
@@ -192,6 +199,9 @@ func (o *OATProxy) getOAuthSession(jkt string) (*OAuthSession, error) {
 	}
 	if session == nil {
 		return nil, nil
+	}
+	if session.UpstreamAccessTokenExp == nil {
+		return nil, fmt.Errorf("ready OAuth session has no upstream access expiry")
 	}
 	if !oldSession.UpstreamAccessTokenExp.Equal(*session.UpstreamAccessTokenExp) {
 		// someone else refreshed, that's chill
@@ -243,6 +253,10 @@ func (o *OATProxy) getOAuthSession(jkt string) (*OAuthSession, error) {
 	session.UpstreamAccessTokenExp = &exp
 	session.UpstreamAccessTokenLifetime = resp.ExpiresIn
 	session.UpstreamRefreshToken = resp.RefreshToken
+	session.UpstreamDPoPNonce = resp.DpopAuthserverNonce
+	if resp.Scope != "" {
+		session.UpstreamScope = resp.Scope
+	}
 
 	err = o.updateOAuthSession(session.DownstreamDPoPJKT, session)
 	if err != nil {
