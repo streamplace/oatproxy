@@ -70,6 +70,12 @@ func (o *OATProxy) NewPAR(ctx context.Context, c echo.Context, par *PAR, dpopHea
 	if err != nil {
 		return nil, echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("failed to load OAuth session: %s", err))
 	}
+	// A linked session's DownstreamScope is the grant it got when it was
+	// linked, so a new request with its key must not rewrite it. (Clients use a
+	// fresh key for every authorization request.)
+	if session != nil && session.UpstreamJKT != "" {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "this DPoP key already belongs to a session; use a new key")
+	}
 	var expectedURL *url.URL
 	var upstreamAuthServerURL string
 	if o.public {

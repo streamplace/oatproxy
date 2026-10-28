@@ -2,13 +2,20 @@ package oatproxy
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/labstack/echo/v4"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 )
 
@@ -221,5 +228,65 @@ func TestLinkedSessionNonceWriteBack(t *testing.T) {
 	}
 	if store["child-jkt"].UpstreamDPoPNonce != "" {
 		t.Error("nonce written to the child row")
+	}
+}
+
+// A linked session's scope is fixed when it's linked. Its client could push a
+// new authorization request with the same DPoP key, which would otherwise
+// rewrite that scope and widen the session's grant without approval.
+func TestLinkedSessionRejectsNewPAR(t *testing.T) {
+	o, store := testLinkProxy(t)
+	root := addRoot(t, store, "atproto blob:*/* include:place.stream.authFull repo:app.bsky.feed.post")
+
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pub, err := jwk.FromRaw(&priv.PublicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pubJSON, err := json.Marshal(pub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pubMap map[string]any
+	if err := json.Unmarshal(pubJSON, &pubMap); err != nil {
+		t.Fatal(err)
+	}
+	proof := jwt.NewWithClaims(jwt.SigningMethodES256, jwt.MapClaims{
+		"htm": "POST",
+		"htu": "https://proxy.example.com/oauth/par",
+		"iat": time.Now().Unix(),
+		"jti": "new-par",
+	})
+	proof.Header["typ"] = "dpop+jwt"
+	proof.Header["jwk"] = pubMap
+	dpopHeader, err := proof.SignedString(priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	jkt, _, err := getJKT(dpopHeader)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	child := linkAndRedeem(t, o, store, jkt, root)
+	granted := child.GrantedScope()
+	if granted == root.UpstreamScope {
+		t.Fatal("test needs a child granted less than the root")
+	}
+
+	c := echo.New().NewContext(httptest.NewRequest(http.MethodPost, "/oauth/par", nil), httptest.NewRecorder())
+	_, err = o.NewPAR(context.Background(), c, &PAR{Scope: root.UpstreamScope}, dpopHeader)
+	if err == nil {
+		t.Fatal("a new PAR with a linked session's key should be refused")
+	}
+	again, err := o.getOAuthSession(jkt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := again.GrantedScope(); got != granted {
+		t.Errorf("granted scope = %q, want it unchanged at %q", got, granted)
 	}
 }
