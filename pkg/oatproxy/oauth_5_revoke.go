@@ -50,7 +50,7 @@ func (o *OATProxy) Revoke(ctx context.Context, dpopHeader string, revokeRequest 
 	now := time.Now()
 	slog.Info("revoking session by user request", "session", session.DownstreamDPoPJKT, "did", session.DID)
 	session.DownstreamRevokedAt = &now
-	err = o.updateOAuthSession(session.DownstreamDPoPJKT, session)
+	err = o.saveSession(session)
 	if err != nil {
 		return fmt.Errorf("could not update downstream session: %w", err)
 	}

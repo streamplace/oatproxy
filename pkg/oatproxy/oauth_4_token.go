@@ -126,7 +126,7 @@ func (o *OATProxy) AccessToken(ctx context.Context, tokenRequest *TokenRequest, 
 	session.DownstreamAccessToken = accessToken
 	session.DownstreamRefreshToken = refreshToken
 
-	err = o.updateOAuthSession(session.DownstreamDPoPJKT, session)
+	err = o.saveSession(session)
 	if err != nil {
 		return nil, fmt.Errorf("could not update downstream session: %w", err)
 	}
@@ -157,7 +157,7 @@ func (o *OATProxy) RefreshToken(ctx context.Context, tokenRequest *TokenRequest,
 	}
 
 	session.DownstreamAccessToken = newJWT
-	err = o.updateOAuthSession(session.DownstreamDPoPJKT, session)
+	err = o.saveSession(session)
 	if err != nil {
 		return nil, fmt.Errorf("could not update downstream session: %w", err)
 	}

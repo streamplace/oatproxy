@@ -37,7 +37,8 @@ func ScopeContains(granted, wanted string) bool {
 // at the time, so callers should treat an empty return value as "everything
 // the application asks for". HasScope implements exactly that rule.
 func (s *OAuthSession) GrantedScope() string {
-	if s.UpstreamScope != "" {
+	// a linked session's scope was narrowed to its root's grant at link time
+	if s.UpstreamJKT == "" && s.UpstreamScope != "" {
 		return s.UpstreamScope
 	}
 	return s.DownstreamScope
@@ -62,6 +63,17 @@ func (o *OATProxy) grantedScope(session *OAuthSession) string {
 		return scope
 	}
 	return o.scope
+}
+
+// intersectScope returns the scope values of a that are also in b, in a's order.
+func intersectScope(a, b string) string {
+	out := []string{}
+	for _, s := range ParseScope(a) {
+		if ScopeContains(b, s) {
+			out = append(out, s)
+		}
+	}
+	return strings.Join(out, " ")
 }
 
 // validateRequestedScope checks a downstream PAR scope request against the

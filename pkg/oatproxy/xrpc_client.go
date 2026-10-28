@@ -40,13 +40,22 @@ func (o *OATProxy) GetXrpcClient(session *OAuthSession) (*XrpcClient, error) {
 
 	xrpcClient := &oauth.XrpcClient{
 		OnDpopPdsNonceChanged: func(did, newNonce string) {
-			sess, err := o.getOAuthSession(session.DownstreamDPoPJKT)
+			// the nonce is upstream state, so it lives on the root of a linked session
+			rootJKT := session.DownstreamDPoPJKT
+			if session.UpstreamJKT != "" {
+				rootJKT = session.UpstreamJKT
+			}
+			sess, err := o.getOAuthSession(rootJKT)
 			if err != nil {
 				o.slog.Error("failed to get OAuth session in OnDpopPdsNonceChanged", "error", err)
 				return
 			}
+			if sess == nil {
+				o.slog.Error("OAuth session not found in OnDpopPdsNonceChanged", "session", rootJKT)
+				return
+			}
 			sess.UpstreamDPoPNonce = newNonce
-			err = o.updateOAuthSession(session.DownstreamDPoPJKT, sess)
+			err = o.updateOAuthSession(rootJKT, sess)
 			if err != nil {
 				o.slog.Error("failed to update OAuth session in OnDpopPdsNonceChanged", "error", err)
 			}
