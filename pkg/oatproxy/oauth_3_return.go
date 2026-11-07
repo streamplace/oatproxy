@@ -2,16 +2,13 @@ package oatproxy
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/xrpc"
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v4"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	oauth "github.com/streamplace/atproto-oauth-golang"
@@ -44,12 +41,21 @@ func (o *OATProxy) HandleOAuthReturn(c echo.Context) error {
 		if err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to load OAuth session jkt=%s: %s", jkt, err))
 		}
+		if session == nil || session.UpstreamState != state || session.UpstreamAuthServerIssuer != iss {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid callback state or issuer")
+		}
 
 		u, err := url.Parse(session.DownstreamRedirectURI)
 		if err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to parse downstream redirect URI: %s", err))
 		}
 		q := u.Query()
+		q.Set("state", session.DownstreamState)
+		if !o.public || o.baseURL != "" {
+			q.Set("iss", o.origin())
+		} else {
+			q.Set("iss", session.UpstreamAuthServerIssuer)
+		}
 		q.Set("error", "return_failed")
 		q.Set("error_description", httpError.Error())
 		u.RawQuery = q.Encode()
@@ -114,29 +120,29 @@ func (o *OATProxy) Return(ctx context.Context, code string, iss string, state st
 	session.UpstreamAccessTokenExp = &expiry
 	session.UpstreamAccessTokenLifetime = itResp.ExpiresIn
 	session.UpstreamRefreshToken = itResp.RefreshToken
+	session.UpstreamDPoPNonce = itResp.DpopAuthserverNonce
 	session.DownstreamAuthorizationCode = downstreamCode
 	session.UpstreamScope = itResp.Scope
 	if session.DID == "" {
-		_, handle, err := ResolveServiceWithClient(ctx, itResp.Sub, o.httpClient)
+		service, handle, err := ResolveServiceWithClient(ctx, itResp.Sub, o.httpClient)
 		if err != nil {
 			return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to resolve service for DID '%s': %s", itResp.Sub, err))
 		}
 		session.DID = itResp.Sub
 		session.Handle = handle
-		claims := jwt.RegisteredClaims{}
-		parser := jwt.NewParser()
-		_, _, err = parser.ParseUnverified(session.UpstreamAccessToken, &claims)
-		if err != nil && !errors.Is(err, jwt.ErrTokenUnverifiable) {
-			return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to parse access token: %s", err))
+		session.PDSUrl = service
+		if o.upstreamURL != "" {
+			session.PDSUrl = o.upstreamURL
 		}
-		if len(claims.Audience) == 0 {
-			return "", echo.NewHTTPError(http.StatusBadRequest, "access token has no audience claim")
-		}
-		if !strings.HasPrefix(claims.Audience[0], "did:web:") {
-			return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("invalid audience: %s", claims.Audience[0]))
-		}
-		session.PDSUrl = fmt.Sprintf("https://%s", strings.TrimPrefix(claims.Audience[0], "did:web:"))
 	}
+	authserver, err := oclient.ResolvePdsAuthServer(ctx, session.PDSUrl)
+	if err != nil {
+		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to resolve PDS auth server for service '%s': %s", session.PDSUrl, err))
+	}
+	if authserver != session.UpstreamAuthServerIssuer {
+		return "", echo.NewHTTPError(http.StatusBadRequest, "account resource issuer differs from authorization issuer")
+	}
+	session.UpstreamAuthServerURL = authserver
 	authArgs := &oauth.XrpcAuthedRequestArgs{
 		Did:            session.DID,
 		AccessToken:    session.UpstreamAccessToken,
@@ -148,6 +154,7 @@ func (o *OATProxy) Return(ctx context.Context, code string, iss string, state st
 
 	xrpcClient := &oauth.XrpcClient{
 		OnDpopPdsNonceChanged: func(did, newNonce string) {},
+		Client:                o.httpClient,
 	}
 
 	// brief check to make sure we can actually do stuff
@@ -156,11 +163,6 @@ func (o *OATProxy) Return(ctx context.Context, code string, iss string, state st
 		o.slog.Error("failed to check account status", "error", err, "pdsUrl", session.PDSUrl, "issuer", session.UpstreamAuthServerIssuer)
 		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to check account status: %s", err))
 	}
-	authserver, err := oclient.ResolvePdsAuthServer(ctx, session.PDSUrl)
-	if err != nil {
-		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to resolve PDS auth server for service '%s': %s", session.PDSUrl, err))
-	}
-	session.UpstreamAuthServerURL = authserver
 
 	err = o.updateOAuthSession(session.DownstreamDPoPJKT, session)
 	if err != nil {
@@ -172,8 +174,8 @@ func (o *OATProxy) Return(ctx context.Context, code string, iss string, state st
 		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to parse downstream redirect URI: %s", err))
 	}
 	q := u.Query()
-	if !o.public {
-		q.Set("iss", fmt.Sprintf("https://%s", o.host))
+	if !o.public || o.baseURL != "" {
+		q.Set("iss", o.origin())
 	} else {
 		q.Set("iss", authserver)
 	}

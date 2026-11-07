@@ -25,6 +25,8 @@ type OATProxy struct {
 	clientMetadata      *OAuthClientMetadata
 	defaultPDS          string
 	public              bool
+	baseURL             string
+	upstreamURL         string
 	httpClient          *http.Client
 	rateLimitCache      *cache.Cache
 }
@@ -35,19 +37,22 @@ type Config struct {
 	GetOAuthSession    func(id string) (*OAuthSession, error)
 	// Lock on the given key, return a function to unlock. If not provided, OATProxy will use a local lock,
 	// but you'll run into trouble with multiple nodes attempting to refresh the same session at the same time.
-	Lock func(id string) (func(), error)
-	Host string
-	// Scope is the maximum scope this proxy will request upstream. Downstream
-	// clients may request any subset of it (which must include "atproto") at
-	// login time; the granted scope is tracked per session.
-	Scope string
+	Lock           func(id string) (func(), error)
+	Host           string
+	Scope          string
 	UpstreamJWK    jwk.Key
 	DownstreamJWK  jwk.Key
 	Slog           *slog.Logger
 	ClientMetadata *OAuthClientMetadata
 	DefaultPDS     string
 	Public         bool
-	HTTPClient     *http.Client
+	// BaseURL is the actual issuer/resource origin. HTTP is restricted to numeric loopback.
+	// Unlike Public, it verifies downstream DPoP against this node, not the upstream.
+	BaseURL string
+	// UpstreamURL overrides the resolved PDS for OAuth and authenticated XRPC.
+	// It must be an HTTPS origin; account identity is still resolved independently.
+	UpstreamURL string
+	HTTPClient  *http.Client
 }
 
 func New(conf *Config) *OATProxy {
@@ -69,7 +74,15 @@ func New(conf *Config) *OATProxy {
 		clientMetadata:      conf.ClientMetadata,
 		defaultPDS:          conf.DefaultPDS,
 		public:              conf.Public,
+		baseURL:             conf.BaseURL,
+		upstreamURL:         conf.UpstreamURL,
 		rateLimitCache:      cache.New(-1, 10*time.Minute),
+	}
+	if err := validateOrigin(conf.BaseURL, true); err != nil {
+		panic(err)
+	}
+	if err := validateOrigin(conf.UpstreamURL, false); err != nil {
+		panic(err)
 	}
 	if conf.HTTPClient != nil {
 		o.httpClient = conf.HTTPClient

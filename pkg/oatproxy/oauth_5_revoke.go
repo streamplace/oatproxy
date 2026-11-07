@@ -39,6 +39,20 @@ func (o *OATProxy) Revoke(ctx context.Context, dpopHeader string, revokeRequest 
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("could not get oauth session: %s", err))
 	}
+	if session == nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "session not found")
+	}
+	meta, err := o.sessionMetadata(session)
+	if err != nil {
+		return err
+	}
+	if !compareURLs(revokeRequest.ClientID, meta.ClientID) {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid client_id")
+	}
+	if revokeRequest.Token == "" || (revokeRequest.Token != session.DownstreamRefreshToken && revokeRequest.Token != session.DownstreamAccessToken) {
+		// RFC 7009: unknown tokens do not disclose their validity.
+		return nil
+	}
 	_, httpErr := dpop.Parse(dpopHeader, dpop.POST, o.authServerURL(session, "/oauth/revoke"), dpop.ParseOptions{
 		Nonce:      "",
 		TimeWindow: &dpopTimeWindow,

@@ -49,6 +49,12 @@ func (o *OATProxy) HandleOAuthAuthorize(c echo.Context) error {
 			return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to parse downstream redirect URI: %s", err))
 		}
 		q := u.Query()
+		q.Set("state", session.DownstreamState)
+		if !o.public || o.baseURL != "" {
+			q.Set("iss", o.origin())
+		} else {
+			q.Set("iss", session.UpstreamAuthServerIssuer)
+		}
 		q.Set("error", "authorize_failed")
 		q.Set("error_description", redirectErr.Error())
 		u.RawQuery = q.Encode()
@@ -68,17 +74,16 @@ func (o *OATProxy) Authorize(ctx context.Context, requestURI, clientID string) (
 	if err != nil {
 		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to load OAuth session jkt=%s: %s", jkt, err))
 	}
+	if session == nil {
+		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("no session found for jkt=%s", jkt))
+	}
 
-	downstreamMeta, err := o.GetDownstreamMetadata(session.DownstreamRedirectURI)
+	downstreamMeta, err := o.sessionMetadata(session)
 	if err != nil {
 		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to get downstream metadata: %s", err))
 	}
 	if !compareURLs(downstreamMeta.ClientID, clientID) {
 		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("client ID mismatch: %s != %s", downstreamMeta.ClientID, clientID))
-	}
-
-	if session == nil {
-		return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("no session found for jkt=%s", jkt))
 	}
 
 	if session.Status() != OAuthSessionStatePARCreated {
@@ -115,22 +120,12 @@ func (o *OATProxy) Authorize(ctx context.Context, requestURI, clientID string) (
 			if httpErr != nil {
 				return "", httpErr
 			}
-			did, err = ResolveHandleWithClient(ctx, session.Handle, o.httpClient)
-			if err != nil {
-				return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to resolve handle '%s': %s", session.Handle, err))
-			}
-
-			var handle2 string
-			service, handle2, err = ResolveServiceWithClient(ctx, did, o.httpClient)
-			if err != nil {
-				return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to resolve service for DID '%s': %s", did, err))
-			}
-			if handle2 != session.Handle {
-				return "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("handle mismatch: %s != %s", handle2, session.Handle))
-			}
 		}
 	} else {
 		service = o.defaultPDS
+	}
+	if o.upstreamURL != "" {
+		service = o.upstreamURL
 	}
 	authserver, err := oclient.ResolvePdsAuthServer(ctx, service)
 	if err != nil {
@@ -158,8 +153,6 @@ func (o *OATProxy) Authorize(ctx context.Context, requestURI, clientID string) (
 		loginHint = ""
 	}
 
-	// request the scope the downstream client asked for at PAR time; sessions
-	// from before scope tracking fall back to the full configured scope
 	requestedScope := session.DownstreamScope
 	if requestedScope == "" {
 		requestedScope = upstreamMeta.Scope

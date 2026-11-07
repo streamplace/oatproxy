@@ -107,7 +107,7 @@ func ResolveServiceWithClient(ctx context.Context, did string, client *http.Clie
 		return "", "", err
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", "", err
 	}
@@ -148,6 +148,16 @@ func ResolveServiceWithClient(ctx context.Context, did string, client *http.Clie
 
 // returns did, service
 func ResolveHandleAndServiceWithClient(ctx context.Context, handle string, client *http.Client) (string, string, *echo.HTTPError) {
+	if strings.HasPrefix(handle, "did:") {
+		if _, err := syntax.ParseDID(handle); err != nil {
+			return "", "", echo.NewHTTPError(http.StatusBadRequest, "invalid DID login hint")
+		}
+		service, _, err := ResolveServiceWithClient(ctx, handle, client)
+		if err != nil {
+			return "", "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to resolve DID: %s", err))
+		}
+		return handle, service, nil
+	}
 	did, err := ResolveHandleWithClient(ctx, handle, client)
 	if err != nil {
 		return "", "", echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to resolve handle '%s': %s", handle, err))

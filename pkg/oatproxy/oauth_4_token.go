@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/AxisCommunications/go-dpop"
@@ -70,13 +71,6 @@ func (o *OATProxy) HandleOAuthToken(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	_, err = dpop.Parse(dpopHeader, dpop.POST, o.authServerURL(session, "/oauth/token"), dpop.ParseOptions{
-		Nonce:      "",
-		TimeWindow: &dpopTimeWindow,
-	})
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("invalid DPoP proof: %s", err))
-	}
 	nonces := generateValidNonces(session.DownstreamDPoPNoncePad, time.Now())
 	c.Response().Header().Set("DPoP-Nonce", nonces[0])
 
@@ -84,6 +78,28 @@ func (o *OATProxy) HandleOAuthToken(c echo.Context) error {
 }
 
 func (o *OATProxy) Token(ctx context.Context, tokenRequest *TokenRequest, dpopHeader string, session *OAuthSession) (*TokenResponse, error) {
+	proof, err := dpop.Parse(dpopHeader, dpop.POST, o.authServerURL(session, "/oauth/token"), dpop.ParseOptions{
+		Nonce: "", TimeWindow: &dpopTimeWindow,
+	})
+	if err != nil || proof.PublicKey() != session.DownstreamDPoPJKT {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "invalid DPoP proof")
+	}
+	meta, err := o.sessionMetadata(session)
+	if err != nil {
+		return nil, err
+	}
+	if !compareURLs(tokenRequest.ClientID, meta.ClientID) {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "invalid client_id")
+	}
+	if tokenRequest.GrantType == "authorization_code" {
+		if !slices.Contains(meta.RedirectURIs, tokenRequest.RedirectURI) {
+			return nil, echo.NewHTTPError(http.StatusBadRequest, "invalid redirect_uri")
+		}
+		redirect, err := redirectTruther(tokenRequest.RedirectURI)
+		if err != nil || redirect != session.DownstreamRedirectURI {
+			return nil, echo.NewHTTPError(http.StatusBadRequest, "invalid redirect_uri")
+		}
+	}
 
 	if tokenRequest.GrantType == "authorization_code" {
 		return o.AccessToken(ctx, tokenRequest, session)
@@ -177,7 +193,7 @@ func (o *OATProxy) generateJWT(session *OAuthSession) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	downstreamMeta, err := o.GetDownstreamMetadata("")
+	downstreamMeta, err := o.sessionMetadata(session)
 	if err != nil {
 		return "", err
 	}
@@ -194,7 +210,7 @@ func (o *OATProxy) generateJWT(session *OAuthSession) (string, error) {
 		"aud":       fmt.Sprintf("did:web:%s", o.host),
 		"scope":     o.grantedScope(session),
 		"client_id": downstreamMeta.ClientID,
-		"iss":       fmt.Sprintf("https://%s", o.host),
+		"iss":       o.origin(),
 	})
 
 	var rawKey any

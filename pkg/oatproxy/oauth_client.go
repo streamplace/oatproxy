@@ -6,9 +6,14 @@ import (
 
 func (o *OATProxy) GetOauthClient() (*oauth.Client, error) {
 	upstreamMeta := o.GetUpstreamMetadata()
+	key := o.upstreamJWK
+	if upstreamMeta.TokenEndpointAuthMethod == "none" {
+		key = nil
+	}
 
 	args := oauth.ClientArgs{
-		ClientJwk:   o.upstreamJWK,
+		Http:        o.httpClient,
+		ClientJwk:   key,
 		ClientId:    upstreamMeta.ClientID,
 		RedirectUri: upstreamMeta.RedirectURIs[0],
 	}

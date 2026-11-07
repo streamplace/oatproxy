@@ -192,6 +192,33 @@ customResolver = new StreamplaceOAuthResolver(
 client.oauthResolver = customResolver;
 ```
 
+# Chaining through a station
+
+Embedded nodes can configure `UpstreamURL` to an HTTPS station origin. Account
+identity still resolves against the user's DID document, but OAuth discovery,
+authorization, refresh, and authenticated XRPC use the station instead of the
+resolved PDS. The station's own proxy continues to use the actual PDS.
+Stored sessions from another upstream are rejected; changing stations requires
+a new login rather than forwarding existing credentials to a new origin.
+
+Set `BaseURL` to the actual origin served by the node. HTTPS is accepted;
+HTTP is accepted only for an explicit numeric loopback origin, such as
+`http://127.0.0.1:38080`. This is distinct from legacy `Public`: metadata,
+callback issuers, JWT issuers, and downstream DPoP verification all refer to
+`BaseURL`, never the station or PDS. Configure `Host` to the same host and port.
+Loopback metadata uses an AT Protocol `http://localhost` public client ID with
+the real callback URI; no synthetic HTTPS callback or request rewriting is
+needed. The browser client must explicitly permit HTTP only for that loopback
+node.
+
+A station accepts self-describing localhost public clients with numeric HTTP
+loopback callbacks. The local node authenticates with `none`, PKCE, and DPoP;
+the station remains a confidential `private_key_jwt` client of the PDS. Each hop
+owns its own DPoP key, access token, refresh token, state, and issuer validation.
+Requested scopes remain bounded by the configured maximum and returned tokens
+report the actual upstream grant. Downstream logout rejects that downstream
+session but retains the independent upstream session.
+
 # Scopes
 
 The `Scope` you configure is the _maximum_ scope. At login time, a downstream
