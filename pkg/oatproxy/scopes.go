@@ -37,11 +37,14 @@ func ScopeContains(granted, wanted string) bool {
 // at the time, so callers should treat an empty return value as "everything
 // the application asks for". HasScope implements exactly that rule.
 func (s *OAuthSession) GrantedScope() string {
-	// a linked session's scope was narrowed to its root's grant at link time
-	if s.UpstreamJKT == "" && s.UpstreamScope != "" {
-		return s.UpstreamScope
+	if s.UpstreamScope == "" {
+		return s.DownstreamScope
 	}
-	return s.DownstreamScope
+	// a linked session's grant can't outlive its root's upstream scope
+	if s.UpstreamJKT != "" {
+		return intersectScope(s.DownstreamScope, s.UpstreamScope)
+	}
+	return s.UpstreamScope
 }
 
 // HasScope reports whether this session was granted every scope value in

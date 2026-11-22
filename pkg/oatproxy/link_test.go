@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -17,6 +18,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v4"
 	"github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/stretchr/testify/require"
 )
 
 // testLinkProxy is testIntrospectProxy backed by an in-memory session store.
@@ -289,4 +291,208 @@ func TestLinkedSessionRejectsNewPAR(t *testing.T) {
 	if got := again.GrantedScope(); got != granted {
 		t.Errorf("granted scope = %q, want it unchanged at %q", got, granted)
 	}
+}
+
+const fullGrant = "atproto blob:*/* repo:app.bsky.feed.post"
+
+// linkWith links a PAR asking for requested to approver, as LinkSession does
+// for a QR approval, and returns the linked session as later loaded.
+func linkWith(t *testing.T, o *OATProxy, store map[string]*OAuthSession, jkt, requested string, approver *OAuthSession) *OAuthSession {
+	t.Helper()
+	if _, err := o.LinkSession(context.Background(), addPAR(store, jkt, requested), approver); err != nil {
+		t.Fatalf("LinkSession: %v", err)
+	}
+	session, err := o.getOAuthSession(jkt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return session
+}
+
+func TestLinkSessionCapsScopeByApproverAndRoot(t *testing.T) {
+	o, store := testLinkProxy(t)
+	o.scope = fullGrant
+	root := addRoot(t, store, fullGrant)
+
+	narrow := linkWith(t, o, store, "narrow-jkt", "atproto blob:*/*", root)
+	if got := narrow.GrantedScope(); got != "atproto blob:*/*" {
+		t.Fatalf("narrow granted %q", got)
+	}
+	// an approver limited to blob can't hand out the post scope its root has
+	child := linkWith(t, o, store, "child-jkt", fullGrant, narrow)
+	if got := child.GrantedScope(); got != "atproto blob:*/*" {
+		t.Errorf("grandchild granted %q, want its approver's grant", got)
+	}
+	// and the root's current grant caps an approver that holds more
+	store["root-jkt"].UpstreamScope = "atproto"
+	approver, err := o.getOAuthSession("narrow-jkt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	only := linkWith(t, o, store, "only-jkt", fullGrant, approver)
+	if got := only.GrantedScope(); got != "atproto" {
+		t.Errorf("granted %q, want the root's narrowed grant", got)
+	}
+
+	// nothing in common with the approver's grant is refused, not granted wide open
+	if _, err := o.LinkSession(context.Background(), addPAR(store, "none-jkt", "repo:app.bsky.feed.post"), approver); err == nil {
+		t.Error("expected an error when the approver can grant none of the request")
+	}
+}
+
+func TestLinkedSessionGrantFollowsRootScope(t *testing.T) {
+	o, store := testLinkProxy(t)
+	root := addRoot(t, store, fullGrant)
+	child := linkWith(t, o, store, "child-jkt", fullGrant, root)
+	if got := child.GrantedScope(); got != fullGrant {
+		t.Fatalf("granted %q", got)
+	}
+
+	// the upstream refresh returned fewer scopes
+	store["root-jkt"].UpstreamScope = "atproto blob:*/*"
+	child, err := o.getOAuthSession("child-jkt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := o.grantedScope(child); got != "atproto blob:*/*" || child.HasScope("repo:app.bsky.feed.post") {
+		t.Errorf("granted %q after the root lost a scope", got)
+	}
+
+	// a root that no longer holds atproto leaves nothing to share
+	store["root-jkt"].UpstreamScope = "blob:*/*"
+	child, err = o.getOAuthSession("child-jkt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if child.Status() != OAuthSessionStateRejected {
+		t.Errorf("status = %s, want rejected", child.Status())
+	}
+}
+
+func TestLinkSessionIssuerIsOrigin(t *testing.T) {
+	o, store := testLinkProxy(t)
+	o.baseURL = "http://127.0.0.1:38080/"
+	root := addRoot(t, store, "")
+	res, err := o.LinkSession(context.Background(), addPAR(store, "child-jkt", "atproto"), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Iss != "http://127.0.0.1:38080" {
+		t.Errorf("iss = %q", res.Iss)
+	}
+}
+
+func TestCheckPendingPAR(t *testing.T) {
+	o, store := testLinkProxy(t)
+	root := addRoot(t, store, "")
+	urn := addPAR(store, "child-jkt", "atproto")
+
+	for name, tc := range map[string]struct {
+		uri  string
+		want bool
+	}{
+		"pending":   {urn, true},
+		"garbage":   {"urn:nope", false},
+		"unknown":   {makeURN("nobody-jkt"), false},
+		"stale uri": {makeURN("child-jkt"), false},
+	} {
+		got, err := o.CheckPendingPAR(context.Background(), tc.uri)
+		if err != nil || got != tc.want {
+			t.Errorf("%s: got %v, %v; want %v", name, got, err, tc.want)
+		}
+	}
+
+	if _, err := o.LinkSession(context.Background(), urn, root); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := o.CheckPendingPAR(context.Background(), urn); err != nil || got {
+		t.Errorf("linked: got %v, %v; want false", got, err)
+	}
+
+	o.userGetOAuthSession = func(string) (*OAuthSession, error) { return nil, errors.New("store down") }
+	if got, err := o.CheckPendingPAR(context.Background(), urn); err == nil || got {
+		t.Errorf("store error: got %v, %v", got, err)
+	}
+}
+
+// With the real store (whose updates skip zero fields) a stray write of the
+// merged session would leave the root's credentials in the child row for good.
+func TestNonceMiddlewareKeepsRootStateOutOfLinkedRow(t *testing.T) {
+	o, db, key := chainProxy(t)
+	rootKey, err := json.Marshal(key)
+	require.NoError(t, err)
+	exp := time.Now().Add(time.Hour)
+	require.NoError(t, db.Create(&OAuthSession{
+		DID: "did:plc:root", PDSUrl: "https://station.example.com", DownstreamDPoPJKT: "root-jkt",
+		DownstreamAccessToken: "root-access", DownstreamDPoPNoncePad: makeNoncePad(),
+		UpstreamDPoPPrivateJWK: string(rootKey), UpstreamAccessToken: "upstream-access", UpstreamRefreshToken: "upstream-refresh",
+		UpstreamAccessTokenExp: &exp, UpstreamAccessTokenLifetime: 3600, UpstreamScope: "atproto",
+	}).Error)
+
+	childKey, err := jwk.FromRaw(mustECDSAKey(t))
+	require.NoError(t, err)
+	endpoint := localOrigin + "/oauth/token"
+	jkt, _, err := getJKT(chainProof(t, childKey, "POST", endpoint, "", ""))
+	require.NoError(t, err)
+	pad := makeNoncePad()
+	urn := makeURN(jkt)
+	require.NoError(t, db.Create(&OAuthSession{DownstreamDPoPJKT: jkt, DownstreamDPoPNoncePad: pad, DownstreamPARRequestURI: urn, DownstreamScope: "atproto"}).Error)
+	root, err := o.getOAuthSession("root-jkt")
+	require.NoError(t, err)
+	_, err = o.LinkSession(t.Context(), urn, root)
+	require.NoError(t, err)
+
+	proof := chainProof(t, childKey, "POST", endpoint, generateValidNonces(pad, time.Now())[0], "")
+	req := httptest.NewRequest(http.MethodPost, "/oauth/token", nil)
+	req.Header.Set("DPoP", proof)
+	c := echo.New().NewContext(req, httptest.NewRecorder())
+	require.NoError(t, o.DPoPNonceMiddleware(func(echo.Context) error { return nil })(c))
+
+	var row OAuthSession
+	require.NoError(t, db.First(&row, "downstream_dpop_jkt = ?", jkt).Error)
+	require.NotEmpty(t, row.DownstreamJTICache, "the middleware still records the proof")
+	require.Empty(t, row.UpstreamAccessToken)
+	require.Empty(t, row.UpstreamRefreshToken)
+	require.Empty(t, row.UpstreamDPoPPrivateJWK)
+}
+
+// A PAR racing LinkSession for the same key must wait for it, then be refused,
+// instead of overwriting the scope the approver just granted.
+func TestNewPARWaitsForLinkSession(t *testing.T) {
+	o, db, key := chainProxy(t)
+	meta, err := o.GetDownstreamMetadata(localOrigin + "/login")
+	require.NoError(t, err)
+	par := &PAR{ClientID: meta.ClientID, RedirectURI: meta.RedirectURIs[0], Scope: testFullScope,
+		LoginHint: "did:plc:account", State: "state", CodeChallenge: "challenge", CodeChallengeMethod: "S256", ResponseType: "code"}
+	endpoint := localOrigin + "/oauth/par"
+	c := o.Echo.NewContext(httptest.NewRequest(http.MethodPost, "/oauth/par", nil), httptest.NewRecorder())
+	jkt, _, err := getJKT(chainProof(t, key, "POST", endpoint, "", ""))
+	require.NoError(t, err)
+	_, err = o.NewPAR(t.Context(), c, par, chainProof(t, key, "POST", endpoint, "", ""))
+	require.ErrorIs(t, err, ErrFirstNonce)
+	nonce := c.Response().Header().Get("DPoP-Nonce")
+	_, err = o.NewPAR(t.Context(), c, par, chainProof(t, key, "POST", endpoint, nonce, ""))
+	require.NoError(t, err)
+
+	unlock, err := o.lock(jkt)
+	require.NoError(t, err)
+	done := make(chan error, 1)
+	par.Scope = "atproto blob:*/*"
+	go func() {
+		_, err := o.NewPAR(t.Context(), c, par, chainProof(t, key, "POST", endpoint, nonce, ""))
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		t.Fatalf("NewPAR ran while the session was locked: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	require.NoError(t, db.Model(&OAuthSession{}).Where("downstream_dpop_jkt = ?", jkt).
+		Updates(map[string]any{"upstream_jkt": "root-jkt", "downstream_scope": "atproto"}).Error)
+	unlock()
+	require.Error(t, <-done)
+
+	var row OAuthSession
+	require.NoError(t, db.First(&row, "downstream_dpop_jkt = ?", jkt).Error)
+	require.Equal(t, "atproto", row.DownstreamScope)
 }

@@ -221,6 +221,11 @@ func (o *OATProxy) getOAuthSession(jkt string) (*OAuthSession, error) {
 	session.DID = root.DID
 	session.Handle = root.Handle
 	session.PDSUrl = root.PDSUrl
+	if !ScopeContains(session.GrantedScope(), "atproto") {
+		// the root's scope shrank away from everything this link was granted
+		now := time.Now()
+		session.RevokedAt = &now
+	}
 	return session, nil
 }
 
