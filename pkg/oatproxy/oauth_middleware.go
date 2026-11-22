@@ -217,7 +217,7 @@ func (o *OATProxy) DPoPNonceMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 		if err := session.CacheJTI(dpopClaims.ID); err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, "DPoP proof already used")
 		}
-		if err := o.updateOAuthSession(jkt, session); err != nil {
+		if err := o.saveSession(session); err != nil {
 			return err
 		}
 

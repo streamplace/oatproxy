@@ -66,13 +66,19 @@ func (o *OATProxy) NewPAR(ctx context.Context, c echo.Context, par *PAR, dpopHea
 	if err != nil {
 		return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("failed to get JKT from DPoP header header=%s: %s", dpopHeader, err))
 	}
-	session, err := o.getOAuthSession(jkt)
+	// LinkSession locks the same key, so a PAR can't land after the session is
+	// linked and rewrite its approved scope.
+	unlock, err := o.lock(jkt)
+	if err != nil {
+		return nil, echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("failed to lock session: %s", err))
+	}
+	defer unlock()
+	session, err := o.userGetOAuthSession(jkt)
 	if err != nil {
 		return nil, echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("failed to load OAuth session: %s", err))
 	}
-	// A linked session's DownstreamScope is the grant it got when it was
-	// linked, so a new request with its key must not rewrite it. (Clients use a
-	// fresh key for every authorization request.)
+	// A linked session keeps the grant it got when linked; clients use a fresh
+	// DPoP key for every authorization request.
 	if session != nil && session.UpstreamJKT != "" {
 		return nil, echo.NewHTTPError(http.StatusBadRequest, "this DPoP key already belongs to a session; use a new key")
 	}
